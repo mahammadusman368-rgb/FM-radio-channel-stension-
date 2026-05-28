@@ -1,0 +1,183 @@
+require "import"
+import "android.media.MediaPlayer"
+import "android.media.AudioManager"
+import "android.widget.*"
+import "android.view.*"
+import "android.content.Context" 
+import "android.net.ConnectivityManager"
+import "java.util.HashMap"
+import "android.net.Uri"
+
+player = MediaPlayer()
+
+-- ✅ Aapke 8 working channels ki list bilkul same hai
+channels = {
+  {name="Suno FM 89.4", url="http://stream.zeno.fm/0r0xa792kwzuv"}, 
+  {name="AIR Live 1", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8"}, 
+  {name="Vividh Bharati (Hindi Direct)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio012/playlist.m3u8"}, 
+  {name="FM Gold Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio214/playlist.m3u8"}, 
+  {name="FM Rainbow Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio216/playlist.m3u8"}, 
+  {name="AIR FM Rainbow Mumbai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio220/playlist.m3u8"}, 
+  {name="AIR FM Gold Mumbai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio218/playlist.m3u8"}, 
+  {name="Classic Bollywood Radio", url="http://stream.zeno.fm/0r0xa792kwzuv"} 
+}
+
+function speak(msg)
+  service.speak(msg)
+end
+
+function isNetworkAvailable()
+  local cm = service.getContext().getSystemService(Context.CONNECTIVITY_SERVICE)
+  local netInfo = cm.getActiveNetworkInfo()
+  return netInfo ~= nil and netInfo.isConnected()
+end
+
+function startStreaming(url, channelName)
+  player.reset()
+  player.setAudioStreamType(AudioManager.STREAM_MUSIC)
+
+  if not isNetworkAvailable() then
+    speak("Internet ka masla hai")
+    return
+  end
+
+  local headers = HashMap()
+  headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
+
+  player.setOnErrorListener(MediaPlayer.OnErrorListener{
+    onError = function(mp, what, extra)
+      speak("Server connect nahi ho pa raha. Error: " .. what .. "," .. extra)
+      return true
+    end
+  })
+
+  local success = pcall(function()
+    local uri = Uri.parse(url)
+    local context = service.getContext()
+    player.setDataSource(context, uri, headers)
+    player.setOnPreparedListener(MediaPlayer.OnPreparedListener{
+      onPrepared = function(mp)
+        mp.start()
+        speak(channelName .. " play ho gaya hai")
+      end
+    })
+    player.prepareAsync()
+    speak("Connecting...")
+  end)
+
+  if not success then
+    speak("URL galat ya server nahi mil raha")
+  end
+end
+
+function showList()
+  local names = {}
+  for i,v in ipairs(channels) do
+    table.insert(names, v.name)
+  end
+
+  local layout = {
+    LinearLayout,
+    orientation="vertical",
+    padding="15dp",
+    {
+      TextView,
+      text="Select Radio Channel",
+      textSize="18sp",
+      gravity="center",
+      layout_width="fill"
+    },
+    {
+      ListView,
+      id="list",
+      layout_width="fill",
+      layout_height="0dp", 
+      layout_weight="1"
+    },
+    {
+      Button,
+      id="back_btn",
+      text="Go Back",
+      layout_width="fill",
+      layout_marginTop="10dp"
+    }
+  }
+
+  dlg = LuaDialog(service)
+  dlg.setView(loadlayout(layout))
+  dlg.show()
+
+  list.setAdapter(ArrayAdapter(service, android.R.layout.simple_list_item_1, names))
+
+  list.onItemClick = function(l,v,pos,id)
+    dlg.dismiss()
+    openPlayer(channels[pos+1])
+  end
+
+  back_btn.onClick = function()
+    -- Crash Fix: os.exit() hata diya hai taaki Jieshuo crash na ho. Dialog close aur player release se instant exit hoga.
+    pcall(function()
+      if player then
+        if player.isPlaying() then player.stop() end
+        player.release()
+      end
+    end)
+    dlg.dismiss()
+  end
+end
+
+function openPlayer(channel)
+  local layout = {
+    LinearLayout,
+    orientation="vertical",
+    padding="15dp",
+    {
+      TextView,
+      text=channel.name,
+      textSize="18sp",
+      gravity="center",
+      layout_width="fill"
+    },
+    {
+      Button,
+      id="play_btn",
+      text="Play",
+      layout_width="fill"
+    },
+    {
+      Button,
+      id="stop_btn",
+      text="Stop",
+      layout_width="fill"
+    },
+    {
+      Button,
+      id="back_btn",
+      text="Back",
+      layout_width="fill"
+    }
+  }
+
+  dlg2 = LuaDialog(service)
+  dlg2.setView(loadlayout(layout))
+  dlg2.show()
+
+  play_btn.onClick = function()
+    startStreaming(channel.url, channel.name)
+  end
+
+  stop_btn.onClick = function()
+    if player.isPlaying() then player.stop() end
+    player.reset()
+    speak("Radio band ho gaya hai")
+  end
+
+  back_btn.onClick = function()
+    if player.isPlaying() then player.stop() end
+    player.reset()
+    dlg2.dismiss()
+    showList()
+  end
+end
+
+showList()
