@@ -7,10 +7,12 @@ import "android.content.Context"
 import "android.net.ConnectivityManager"
 import "java.util.HashMap"
 import "android.net.Uri"
+import "android.content.Intent" -- WhatsApp open karne ke liye import kiya gaya
 
 player = MediaPlayer()
+last_selected_pos = 0 -- Focus ko yaad rakhne ke liye variable
 
--- ✅ Pehle wale 8 channels aur unke neche aapki bheji hui list bina kisi duplicate channel ke add kar di hai
+-- Pehle wale 8 channels aur unke neche aapki bheji hui list bina kisi duplicate channel ke add kar di hai
 channels = {
   {name="Suno FM 89.4", url="http://stream.zeno.fm/0r0xa792kwzuv"}, 
   {name="AIR Live 1", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8"}, 
@@ -99,7 +101,7 @@ function showList()
     padding="15dp",
     {
       TextView,
-      text="Select Radio Channel",
+      text="FM radio channel creator Mohammed Usman", -- Extension ka naam aapke mutabik badal diya
       textSize="18sp",
       gravity="center",
       layout_width="fill"
@@ -113,10 +115,17 @@ function showList()
     },
     {
       Button,
+      id="contact_btn", -- Contact creator button go back ke upar add kar diya
+      text="Contact Creator",
+      layout_width="fill",
+      layout_marginTop="10dp"
+    },
+    {
+      Button,
       id="back_btn",
       text="Go Back",
       layout_width="fill",
-      layout_marginTop="10dp"
+      layout_marginTop="5dp"
     }
   }
 
@@ -125,10 +134,21 @@ function showList()
   dlg.show()
 
   list.setAdapter(ArrayAdapter(service, android.R.layout.simple_list_item_1, names))
+  
+  -- Wapas aane par focus purane selected channel par set karne ke liye
+  list.setSelection(last_selected_pos)
 
   list.onItemClick = function(l,v,pos,id)
+    last_selected_pos = pos -- Position ko save kiya taake focus barkarar rahe
     dlg.dismiss()
     openPlayer(channels[pos+1])
+  end
+
+  contact_btn.onClick = function()
+    local wp_url = "https://wa.me/923261421100"
+    local intent = Intent(Intent.ACTION_VIEW, Uri.parse(wp_url))
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    service.getContext().startActivity(intent)
   end
 
   back_btn.onClick = function()
@@ -192,7 +212,7 @@ function openPlayer(channel)
     if player.isPlaying() then player.stop() end
     player.reset()
     dlg2.dismiss()
-    showList()
+    showList() -- Jab list wapas khulegi to focus purane channel par hi rahega
   end
 end
 
