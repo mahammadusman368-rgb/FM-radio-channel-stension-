@@ -10,7 +10,7 @@ import "android.net.Uri"
 
 player = MediaPlayer()
 
--- ✅ Aapke 8 working channels ki list bilkul same hai
+-- ✅ Pehle wale 8 channels aur unke neche aapki bheji hui list bina kisi duplicate channel ke add kar di hai
 channels = {
   {name="Suno FM 89.4", url="http://stream.zeno.fm/0r0xa792kwzuv"}, 
   {name="AIR Live 1", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8"}, 
@@ -19,7 +19,24 @@ channels = {
   {name="FM Rainbow Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio216/playlist.m3u8"}, 
   {name="AIR FM Rainbow Mumbai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio220/playlist.m3u8"}, 
   {name="AIR FM Gold Mumbai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio218/playlist.m3u8"}, 
-  {name="Classic Bollywood Radio", url="http://stream.zeno.fm/0r0xa792kwzuv"} 
+  {name="Classic Bollywood Radio", url="http://stream.zeno.fm/0r0xa792kwzuv"}, 
+  
+  -- Aapki bheji hui approved list (Tarteeb ke mutabik aur bina duplicates ke) 👇
+  {name="AIR Rohtak", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio051/playlist.m3u8"},
+  {name="AIR Shimla", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio053/playlist.m3u8"},
+  {name="AIR Srinagar", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio056/playlist.m3u8"},
+  {name="AIR Jammu", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio054/playlist.m3u8"},
+  {name="AIR Indore", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio090/playlist.m3u8"},
+  {name="AIR Bhopal", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio089/playlist.m3u8"},
+  {name="AIR Jaipur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio121/playlist.m3u8"},
+  {name="AIR Patna", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio102/playlist.m3u8"},
+  {name="AIR Vividh Bharati Lucknow", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio146/playlist.m3u8"},
+  {name="AIR FM Rainbow Hyderabad", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio222/playlist.m3u8"},
+  {name="AIR FM Rainbow Bangalore", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio223/playlist.m3u8"},
+  {name="AIR FM Gold Chennai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio219/playlist.m3u8"},
+  {name="AIR FM Rainbow Chennai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio221/playlist.m3u8"},
+  {name="AIR FM Gold Ludhiana", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio207/playlist.m3u8"},
+  {name="AIR Awadh FM Lucknow", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio145/playlist.m3u8"}
 }
 
 function speak(msg)
@@ -115,7 +132,6 @@ function showList()
   end
 
   back_btn.onClick = function()
-    -- Crash Fix: os.exit() hata diya hai taaki Jieshuo crash na ho. Dialog close aur player release se instant exit hoga.
     pcall(function()
       if player then
         if player.isPlaying() then player.stop() end
