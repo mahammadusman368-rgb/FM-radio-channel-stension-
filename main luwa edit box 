@@ -17,8 +17,39 @@ favorites = {}
 current_category = "" 
 whatsapp_number = "923261421100"
 
--- Tamam Channels (Exactly same wahi hain jaisa chal rahe the)
+-- Tamam Channels (Exactly same wahi hain jaisa chal rahe the + Pakistan Category)
 all_channels = {
+  -- 🟢 Pakistan FM Radio Channels (Tarteeb ke sath add kar diye hain)
+  {name="Radio Pak Filmi", url="https://stream.zeno.fm/0r0xa792kwzuv", cat="Pakistan"},
+  {name="D.I. Khan MW 711", url="https://whmsonic.radio.gov.pk:7000/Dikhan?type=http&nocache=9", cat="Pakistan"},
+  {name="Peshawar MW (PBC)", url="https://whmsonic.radio.gov.pk:8072/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Peshawar", url="https://whmsonic.radio.gov.pk:8070/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="Quetta MW (PBC)", url="https://whmsonic.radio.gov.pk:8060/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Quetta", url="https://whmsonic.radio.gov.pk:8058/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Hyderabad MW 1008KHz", url="https://whmsonic.radio.gov.pk:8042/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Hyderabad", url="https://whmsonic.radio.gov.pk:8044/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="MW 639 Karachi", url="https://whmsonic.radio.gov.pk:7000/MW639khi?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Karachi", url="https://whmsonic.radio.gov.pk:7022/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Sargodha", url="https://whmsonic.radio.gov.pk:8040/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Sialkot", url="https://whmsonic.radio.gov.pk:8038/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Mianwali", url="https://whmsonic.radio.gov.pk:8028/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="MW Bahawalpur (PBC)", url="https://whmsonic.radio.gov.pk:8092/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="Multan MW (PBC)", url="https://whmsonic.radio.gov.pk:8034/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 93 Multan", url="https://whmsonic.radio.gov.pk:7014/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 93 Faisalabad", url="https://whmsonic.radio.gov.pk:8022/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Faisalabad", url="https://whmsonic.radio.gov.pk:8024/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Lahore", url="https://whmsonic.radio.gov.pk:8088/stream?type=http&nocache=4", cat="Pakistan"},
+  {name="FM 101 Lahore", url="https://whmsonic.radio.gov.pk:7000/101lahore", cat="Pakistan"},
+  {name="Sports & Health Channel", url="https://whmsonic.radio.gov.pk:7007/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Radio Pakistan External Service", url="https://whmsonic.radio.gov.pk:7006/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Radio Pakistan World Service", url="https://whmsonic.radio.gov.pk:7005/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="NCAC Radio Islamabad", url="https://whmsonic.radio.gov.pk:7004/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Islamabad Station (PBC)", url="https://whmsonic.radio.gov.pk:7003/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Planet FM 87.6 Islamabad", url="https://whmsonic.radio.gov.pk:7042/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Islamabad", url="https://whmsonic.radio.gov.pk:7008/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Saut-ul-Quran (Islamabad)", url="https://whmsonic.radio.gov.pk:7002/stream?type=http&nocache=12", cat="Pakistan"},
+
+  -- Existing Channels
   {name="Suno FM 89.4", url="http://stream.zeno.fm/0r0xa792kwzuv", cat="Urdu"}, 
   {name="AIR Live 1", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", cat="Urdu"}, 
   {name="Vividh Bharati (Hindi Direct)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio012/playlist.m3u8", cat="Urdu"}, 
@@ -221,7 +252,7 @@ end
 -- Fixed About and Support Menu Panel (Removed textStyle=bold to fix crash)
 function showAboutMenu()
   local layout = {LinearLayout, orientation="vertical", padding="20dp",
-    {TextView, id="title_txt", text="Creator Mohammed Usman", textSize="18sp", gravity="center", layout_marginBottom="10dp"},
+    {TextView, id="title_txt", text="Creator Mohammed Usman", textSize="18sp", gravity="center", layout_bottomData="10dp"},
     {TextView, text="WhatsApp: " .. whatsapp_number, textSize="16sp", gravity="center", layout_marginBottom="20dp"},
     {Button, id="copy_btn", text="Copy Number", layout_width="fill"},
     {Button, id="contact_btn", text="Contact on WhatsApp", layout_width="fill"},
@@ -262,6 +293,7 @@ end
 function mainMenu()
   local layout = {LinearLayout, orientation="vertical", padding="20dp",
     {TextView, text="FM radio channel creator Mohammed Usman", textSize="16sp", gravity="center", layout_marginBottom="20dp"},
+    {Button, id="pak_btn", text="Pakistan FM Radio Channel", layout_width="fill"},
     {Button, id="urdu_btn", text="Urdu FM Radio Channel", layout_width="fill"},
     {Button, id="eng_btn", text="English Channel", layout_width="fill"},
     {Button, id="sports_btn", text="Sports Channel", layout_width="fill"},
@@ -274,6 +306,7 @@ function mainMenu()
   dlgMain.setView(loadlayout(layout))
   dlgMain.show()
 
+  pak_btn.onClick = function() dlgMain.dismiss() showList("Pakistan") end
   urdu_btn.onClick = function() dlgMain.dismiss() showList("Urdu") end
   eng_btn.onClick = function() dlgMain.dismiss() showList("English") end
   sports_btn.onClick = function() dlgMain.dismiss() showList("Sports") end
