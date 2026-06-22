@@ -4,88 +4,159 @@ import "android.media.AudioManager"
 import "android.widget.*"
 import "android.view.*"
 import "android.content.Context" 
-import "android.net.ConnectivityManager"
 import "java.util.HashMap"
 import "android.net.Uri"
 import "android.content.Intent"
-import "android.graphics.Typeface" -- Font style ke liye taaki crash na ho
+import "android.content.ClipboardManager"
+import "android.content.ClipData"
+import "org.json.JSONArray"
+import "org.json.JSONObject"
 
--- Global Variables
+-- =============================================
+-- Extension Name: FM Radio Channel
+-- Creator: Mohammad Usman
+-- =============================================
+
+if player then pcall(function() player.stop() player.release() end) end
 player = MediaPlayer()
+
 lastPosition = 0
-favorites = {} 
 current_category = "" 
 whatsapp_number = "923261421100"
 
--- Tamam Channels (Exactly same wahi hain jaisa chal rahe the + Pakistan Category)
+local prefs = service.getContext().getSharedPreferences("fm_favorites", Context.MODE_PRIVATE)
+local audioManager = service.getContext().getSystemService(Context.AUDIO_SERVICE)
+
+function loadFavorites()
+  local json = prefs.getString("fav_list", "[]")
+  local list = {}
+  local arr = JSONArray(json)
+  for i=0, arr.length()-1 do
+    local obj = arr.getJSONObject(i)
+    table.insert(list, {name=obj.getString("name"), url=obj.getString("url"), cat="Favourite"})
+  end
+  return list
+end
+
+function saveFavorites(list)
+  local arr = JSONArray()
+  for _, ch in ipairs(list) do
+    local obj = JSONObject()
+    obj.put("name", ch.name)
+    obj.put("url", ch.url)
+    obj.put("cat", "Favourite")
+    arr.put(obj)
+  end
+  prefs.edit().putString("fav_list", arr.toString()).commit()
+end
+
+favorites = loadFavorites()
+
 all_channels = {
-  -- 🟢 Pakistan FM Radio Channels (Tarteeb ke sath add kar diye hain)
-  {name="Radio Pak Filmi", url="https://stream.zeno.fm/0r0xa792kwzuv", cat="Pakistan"},
-  {name="D.I. Khan MW 711", url="https://whmsonic.radio.gov.pk:7000/Dikhan?type=http&nocache=9", cat="Pakistan"},
+  {name="Radio Pakistan World Service", url="https://whmsonic.radio.gov.pk:7005/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Radio Pakistan External Service", url="https://whmsonic.radio.gov.pk:7006/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Islamabad Station (PBC)", url="https://whmsonic.radio.gov.pk:7003/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Planet FM 87.6 Islamabad", url="https://whmsonic.radio.gov.pk:7042/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="NCAC Radio Islamabad", url="https://whmsonic.radio.gov.pk:7004/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Islamabad", url="https://whmsonic.radio.gov.pk:7008/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 93 Lahore", url="https://whmsonic.radio.gov.pk:8088/stream?type=http&nocache=4", cat="Pakistan"},
+  {name="FM 101 Lahore", url="https://whmsonic.radio.gov.pk:7000/101lahore", cat="Pakistan"},
+  {name="FM 93 Lahore (Alt)", url="https://whmsonic.radio.gov.pk:7011/stream", cat="Pakistan"},
+  {name="Lahore MW", url="https://whmsonic.radio.gov.pk:8026/relay", cat="Pakistan"},
+  {name="FM 93 Karachi", url="https://whmsonic.radio.gov.pk:7022/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Karachi", url="https://whmsonic.radio.gov.pk:8048/stream", cat="Pakistan"},
+  {name="MW 639 Karachi", url="https://whmsonic.radio.gov.pk:7000/MW639khi?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Multan", url="https://whmsonic.radio.gov.pk:7014/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Multan", url="https://whmsonic.radio.gov.pk:8032/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Multan MW (PBC)", url="https://whmsonic.radio.gov.pk:8034/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 93 Faisalabad", url="https://whmsonic.radio.gov.pk:8022/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Faisalabad", url="https://whmsonic.radio.gov.pk:8024/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Rawalpindi", url="https://whmsonic.radio.gov.pk:8036/relay?type=http&nocache=9", cat="Pakistan"},
   {name="Peshawar MW (PBC)", url="https://whmsonic.radio.gov.pk:8072/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 101 Peshawar", url="https://whmsonic.radio.gov.pk:8070/relay?type=http&nocache=9", cat="Pakistan"},
   {name="Quetta MW (PBC)", url="https://whmsonic.radio.gov.pk:8060/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 101 Quetta", url="https://whmsonic.radio.gov.pk:8058/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Hyderabad MW 1008KHz", url="https://whmsonic.radio.gov.pk:8042/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Quetta (Alt)", url="https://whmsonic.radio.gov.pk:7028/;", cat="Pakistan"},
   {name="FM 101 Hyderabad", url="https://whmsonic.radio.gov.pk:8044/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="MW 639 Karachi", url="https://whmsonic.radio.gov.pk:7000/MW639khi?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 93 Karachi", url="https://whmsonic.radio.gov.pk:7022/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Hyderabad MW 1008KHz", url="https://whmsonic.radio.gov.pk:8042/stream?type=http&nocache=12", cat="Pakistan"},
   {name="FM 101 Sargodha", url="https://whmsonic.radio.gov.pk:8040/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 101 Sialkot", url="https://whmsonic.radio.gov.pk:8038/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 93 Mianwali", url="https://whmsonic.radio.gov.pk:8028/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM93 Skardu", url="https://whmsonic.radio.gov.pk:8104/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="MW 1557 Skardu", url="https://whmsonic.radio.gov.pk:8080/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Mithi", url="https://whmsonic.radio.gov.pk:8052/stream?type=http&nocache=12", cat="Pakistan"},
   {name="MW Bahawalpur (PBC)", url="https://whmsonic.radio.gov.pk:8092/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="Multan MW (PBC)", url="https://whmsonic.radio.gov.pk:8034/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="FM 93 Multan", url="https://whmsonic.radio.gov.pk:7014/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="FM 93 Faisalabad", url="https://whmsonic.radio.gov.pk:8022/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 101 Faisalabad", url="https://whmsonic.radio.gov.pk:8024/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 93 Lahore", url="https://whmsonic.radio.gov.pk:8088/stream?type=http&nocache=4", cat="Pakistan"},
-  {name="FM 101 Lahore", url="https://whmsonic.radio.gov.pk:7000/101lahore", cat="Pakistan"},
+  {name="FM 101 Bahawalpur", url="http://whmsonic.radio.gov.pk:8020/;", cat="Pakistan"},
+  {name="D.I. Khan MW 711", url="https://whmsonic.radio.gov.pk:7000/Dikhan?type=http&nocache=9", cat="Pakistan"},
   {name="Sports & Health Channel", url="https://whmsonic.radio.gov.pk:7007/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Radio Pakistan External Service", url="https://whmsonic.radio.gov.pk:7006/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Radio Pakistan World Service", url="https://whmsonic.radio.gov.pk:7005/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="NCAC Radio Islamabad", url="https://whmsonic.radio.gov.pk:7004/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Islamabad Station (PBC)", url="https://whmsonic.radio.gov.pk:7003/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Planet FM 87.6 Islamabad", url="https://whmsonic.radio.gov.pk:7042/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="FM 101 Islamabad", url="https://whmsonic.radio.gov.pk:7008/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Suno FM", url="https://stream.zeno.fm/u9hkurj5kjkuv", cat="Pakistan"},
+  {name="Suno FM Saraiki", url="http://stream.zeno.fm/evbchqja5oetv", cat="Pakistan"},
+  {name="Suno FM Balochi", url="https://stream.zeno.fm/nvvbgyewxksuv", cat="Pakistan"},
+  {name="FM 100 Pakistan", url="http://162.244.80.118:4900/;stream.mp3", cat="Pakistan"},
+  {name="FM 100 Pakistan Karachi", url="http://162.244.80.118:3024/stream.mp3?ver=349829", cat="Pakistan"},
+  {name="FM 100 Islamabad (Alt)", url="http://162.244.80.118:4900/stream.mp3?ver=604498", cat="Pakistan"},
+  {name="FM 106.2 Yes Music Lahore", url="http://66.45.232.131:9994/stream", cat="Pakistan"},
+  {name="FM 106.2 Yes Music Islamabad", url="http://66.45.232.131:9994/stream", cat="Pakistan"},
+  {name="FM 106.2 Yes Music Karachi", url="http://66.45.232.131:9994/stream", cat="Pakistan"},
+  {name="Samaa FM 107.4", url="https://samaakhi107-itelservices.radioca.st/stream", cat="Pakistan"},
+  {name="Mera FM 107.4 Lahore", url="https://samaalhr107-itelservices.radioca.st/stream", cat="Pakistan"},
+  {name="Apna Karachi 107 FM", url="http://streaming.apnakarachi107.fm:7070/live107", cat="Pakistan"},
+  {name="Hum FM 106.2", url="https://server.mediacast4u.stream/8002/stream", cat="Pakistan"},
+  {name="Awam FM", url="http://server.mediacast4u.stream/8010/stream", cat="Pakistan"},
+  {name="Hot FM 89 Layyah", url="https://stream.zeno.fm/rupdjglocbvtv", cat="Pakistan"},
+  {name="Hot FM Karachi", url="https://cc.vmakerhost.com/proxy/sc_khi1?mp=/stream", cat="Pakistan"},
+  {name="Hot FM Sanghar", url="http://cc.vmakerhost.com/proxy/sc_sang?mp=/stream", cat="Pakistan"},
+  {name="Hot FM 105 Badin", url="http://cc.vmakerhost.com:8000/listen.mp3", cat="Pakistan"},
+  {name="ON FM 91.6 Khanewal", url="https://stream.zeno.fm/evbchqja5oetv", cat="Pakistan"},
+  {name="Jan FM 91.6", url="http://islamicbulletin.site:8092/;", cat="Pakistan"},
+  {name="Radio Jeevay Khanewal", url="http://s7.reliastream.com:8218/Tune-In", cat="Pakistan"},
+  {name="Radio Jeevay Bahawalpur", url="http://canada1.reliastream.com:8155/;", cat="Pakistan"},
+  {name="Buzz FM", url="http://fusion.shoutca.st:8112/stream", cat="Pakistan"},
   {name="Saut-ul-Quran (Islamabad)", url="https://whmsonic.radio.gov.pk:7002/stream?type=http&nocache=12", cat="Pakistan"},
-
-  -- Existing Channels
-  {name="Suno FM 89.4", url="http://stream.zeno.fm/0r0xa792kwzuv", cat="Urdu"}, 
-  {name="AIR Live 1", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", cat="Urdu"}, 
-  {name="Vividh Bharati (Hindi Direct)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio012/playlist.m3u8", cat="Urdu"}, 
-  {name="FM Gold Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio214/playlist.m3u8", cat="Urdu"}, 
-  {name="FM Rainbow Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio216/playlist.m3u8", cat="Urdu"}, 
-  {name="AIR FM Rainbow Mumbai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio220/playlist.m3u8", cat="Urdu"}, 
-  {name="AIR FM Gold Mumbai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio218/playlist.m3u8", cat="Urdu"}, 
-  {name="Classic Bollywood Radio", url="http://stream.zeno.fm/0r0xa792kwzuv", cat="Urdu"}, 
-  {name="AIR Rohtak", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio051/playlist.m3u8", cat="Urdu"},
-  {name="AIR Shimla", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio053/playlist.m3u8", cat="Urdu"},
-  {name="AIR Srinagar", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio056/playlist.m3u8", cat="Urdu"},
-  {name="AIR Jammu", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio054/playlist.m3u8", cat="Urdu"},
-  {name="AIR Indore", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio090/playlist.m3u8", cat="Urdu"},
-  {name="AIR Bhopal", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio089/playlist.m3u8", cat="Urdu"},
-  {name="AIR Jaipur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio121/playlist.m3u8", cat="Urdu"},
-  {name="AIR Patna", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio102/playlist.m3u8", cat="Urdu"},
-  {name="AIR Vividh Bharati Lucknow", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio146/playlist.m3u8", cat="Urdu"},
-  {name="AIR FM Rainbow Hyderabad", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio222/playlist.m3u8", cat="Urdu"},
-  {name="AIR FM Rainbow Bangalore", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio223/playlist.m3u8", cat="Urdu"},
-  {name="AIR FM Gold Chennai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio219/playlist.m3u8", cat="Urdu"},
-  {name="AIR FM Rainbow Chennai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio221/playlist.m3u8", cat="Urdu"},
-  {name="AIR FM Gold Ludhiana", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio207/playlist.m3u8", cat="Urdu"},
-  {name="AIR Awadh FM Lucknow", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio145/playlist.m3u8", cat="Urdu"},
-  {name="AIR Kurukshetra", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio050/playlist.m3u8", cat="Urdu"},
-  {name="AIR Chandigarh", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio161/playlist.m3u8", cat="Urdu"},
-  {name="AIR Nagpur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio084/playlist.m3u8", cat="Urdu"},
-  {name="AIR Pune", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio085/playlist.m3u8", cat="Urdu"},
-  {name="AIR Ahmedabad", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio075/playlist.m3u8", cat="Urdu"},
-  {name="AIR Udaipur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio126/playlist.m3u8", cat="Urdu"},
-  {name="AIR Jodhpur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio122/playlist.m3u8", cat="Urdu"},
-  {name="AIR Allahabad", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio143/playlist.m3u8", cat="Urdu"},
-  {name="AIR Varanasi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio149/playlist.m3u8", cat="Urdu"},
-  {name="AIR Lucknow (National)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio144/playlist.m3u8", cat="Urdu"},
-  {name="AIR Jalandhar (Punjabi)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio205/playlist.m3u8", cat="Urdu"},
-  {name="Pak Hits HD Digital", url="http://stream.zeno.fm/0r0xa792kwzuv", cat="Urdu"},
+  {name="Saut ul Quran (Alt)", url="https://whmsonic.radio.gov.pk:7010/stream", cat="Pakistan"},
+  {name="Quran Radio Makkah", url="https://stream.radiojar.com/8s5u5tpdtwzuv", cat="Pakistan"},
+  {name="Quran Radio Madinah", url="https://stream.radiojar.com/0tpy1h0kxtzuv", cat="Pakistan"},
+  {name="Radio Pak Filmi", url="https://stream.zeno.fm/0r0xa792kwzuv", cat="Pakistan"},
+  {name="Pak 100", url="https://stream.zeno.fm/4bav1shcna0uv", cat="Pakistan"},
+  {name="Radio FM World Pakistan", url="https://stream.zeno.fm/tty4gmu30ehvv", cat="Pakistan"},
+  {name="All 4Masti", url="https://stream.zeno.fm/31huk9y8u68uv", cat="Pakistan"},
+  {name="All 4Masti Sargodha", url="https://stream.zeno.fm/bahhkuge5zhvv", cat="Pakistan"},
+  {name="Hot FM 105 Quetta", url="http://cc.vmakerhost.com:8066/;", cat="Pakistan"},
+  {name="AIR Live 1", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", cat="India"},
+  {name="Vividh Bharati", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio012/playlist.m3u8", cat="India"},
+  {name="FM Gold Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio214/playlist.m3u8", cat="India"},
+  {name="FM Rainbow Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio216/playlist.m3u8", cat="India"},
+  {name="AIR FM Rainbow Mumbai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio220/playlist.m3u8", cat="India"},
+  {name="AIR FM Gold Mumbai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio218/playlist.m3u8", cat="India"},
+  {name="AIR Rohtak", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio051/playlist.m3u8", cat="India"},
+  {name="AIR Shimla", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio053/playlist.m3u8", cat="India"},
+  {name="AIR Srinagar", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio056/playlist.m3u8", cat="India"},
+  {name="AIR Jammu", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio054/playlist.m3u8", cat="India"},
+  {name="AIR Indore", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio090/playlist.m3u8", cat="India"},
+  {name="AIR Bhopal", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio089/playlist.m3u8", cat="India"},
+  {name="AIR Jaipur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio121/playlist.m3u8", cat="India"},
+  {name="AIR Patna", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio102/playlist.m3u8", cat="India"},
+  {name="AIR Vividh Bharati Lucknow", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio146/playlist.m3u8", cat="India"},
+  {name="AIR FM Rainbow Hyderabad", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio222/playlist.m3u8", cat="India"},
+  {name="AIR FM Rainbow Bangalore", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio223/playlist.m3u8", cat="India"},
+  {name="AIR FM Gold Chennai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio219/playlist.m3u8", cat="India"},
+  {name="AIR FM Rainbow Chennai", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio221/playlist.m3u8", cat="India"},
+  {name="AIR FM Gold Ludhiana", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio207/playlist.m3u8", cat="India"},
+  {name="AIR Awadh FM Lucknow", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio145/playlist.m3u8", cat="India"},
+  {name="AIR Kurukshetra", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio050/playlist.m3u8", cat="India"},
+  {name="AIR Chandigarh", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio161/playlist.m3u8", cat="India"},
+  {name="AIR Nagpur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio084/playlist.m3u8", cat="India"},
+  {name="AIR Pune", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio085/playlist.m3u8", cat="India"},
+  {name="AIR Ahmedabad", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio075/playlist.m3u8", cat="India"},
+  {name="AIR Udaipur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio126/playlist.m3u8", cat="India"},
+  {name="AIR Jodhpur", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio122/playlist.m3u8", cat="India"},
+  {name="AIR Allahabad", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio143/playlist.m3u8", cat="India"},
+  {name="AIR Varanasi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio149/playlist.m3u8", cat="India"},
+  {name="AIR Lucknow (National)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio144/playlist.m3u8", cat="India"},
+  {name="AIR Jalandhar", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio205/playlist.m3u8", cat="India"},
   {name="BBC World Service", url="http://stream.live.vc.bbcmedia.co.uk/bbc_world_service", cat="English"},
+  {name="BBC Arabic", url="http://stream.live.vc.bbcmedia.co.uk/bbc_arabic_radio", cat="English"},
+  {name="VOA Urdu", url="https://voa-28.akacast.akamaistream.net/7/368/437800/v1/ibb.akacast.akamaistream.net/voa-urdu", cat="English"},
   {name="Jazz Radio International", url="http://jazzradio.ice.infomaniak.ch/jazzradio-high.mp3", cat="English"},
   {name="Radio Classique France", url="http://radioclassique.ice.infomaniak.ch/radioclassique-high.mp3", cat="English"},
   {name="Chante France", url="http://chantefrance.ice.infomaniak.ch/chantefrance-128.mp3", cat="English"},
@@ -93,235 +164,253 @@ all_channels = {
   {name="Swiss Pop Radio", url="http://stream.srg-ssr.ch/m/rsp/mp3_128", cat="English"},
   {name="Swiss Jazz Radio", url="http://stream.srg-ssr.ch/m/rsj/mp3_128", cat="English"},
   {name="RTÉ Radio 1 News Ireland", url="http://icecast2.rte.ie/radio1", cat="English"},
-  {name="Newstalk Ireland (English Talk)", url="https://stream.audioxi.com/NT", cat="English"},
+  {name="Newstalk Ireland", url="https://stream.audioxi.com/NT", cat="English"},
   {name="TalkSPORT UK", url="https://radio.talksport.com/stream", cat="Sports"},
   {name="All India Radio Sports", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", cat="Sports"},
   {name="Cricket Fever Radio", url="http://stream.zeno.fm/0r0xa792kwzuv", cat="Sports"}
 }
 
+local currentVolume = 0
+
+-- Audio Ducking Function
 function speak(msg)
-  if service and service.speak then service.speak(msg) end
+  if service and service.speak then
+    local am = audioManager
+    local stream = AudioManager.STREAM_MUSIC
+    currentVolume = am.getStreamVolume(stream)
+    am.setStreamVolume(stream, math.floor(am.getStreamMaxVolume(stream) * 0.2), 0)
+    service.speak(msg)
+    task(3000, function() am.setStreamVolume(stream, currentVolume, 0) end)
+  end
 end
 
-function isNetworkAvailable()
-  local cm = service.getContext().getSystemService(Context.CONNECTIVITY_SERVICE)
-  local netInfo = cm.getActiveNetworkInfo()
-  return netInfo ~= nil and netInfo.isConnected()
+function updateVolTts()
+  local max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+  local cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+  currentVolume = cur
+  local percent = math.floor((cur / max) * 100)
+  speak(percent .. " فیصد")
 end
 
-function startStreaming(url, channelName, playPauseBtn)
+function startStreaming(url, playPauseBtn, name)
   player.reset()
   player.setAudioStreamType(AudioManager.STREAM_MUSIC)
-
-  if not isNetworkAvailable() then
-    speak("Internet ka masla hai")
-    return
-  end
-
-  local headers = HashMap()
-  headers.put("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
-
+  player.setDataSource(url)
+  player.prepareAsync()
+  player.setOnPreparedListener(MediaPlayer.OnPreparedListener{
+    onPrepared = function(mp) 
+      mp.start() 
+      if playPauseBtn then playPauseBtn.setText("Stop Radio") end 
+      speak("چینل پلے ہو گیا " .. (name and (": " .. name) or ""))
+    end
+  })
   player.setOnErrorListener(MediaPlayer.OnErrorListener{
     onError = function(mp, what, extra)
-      speak("Server connect nahi ho pa raha.")
+      local msg = "چینل چل نہیں سکا"
+      if what == 1 then msg = "نیٹ ورک کا مسئلہ ہے" end
+      speak(msg)
       if playPauseBtn then playPauseBtn.setText("Play") end
       return true
     end
   })
+end
 
-  local success = pcall(function()
-    local uri = Uri.parse(url)
-    local context = service.getContext()
-    player.setDataSource(context, uri, headers)
-    player.setOnPreparedListener(MediaPlayer.OnPreparedListener{
-      onPrepared = function(mp)
-        mp.start()
-        speak(channelName .. " play ho gaya hai")
-        if playPauseBtn then playPauseBtn.setText("Pause") end
-      end
-    })
-    player.prepareAsync()
-    speak("Connecting...")
-  end)
-
-  if not success then
-    speak("URL galat ya server nahi mil raha")
-    if playPauseBtn then playPauseBtn.setText("Play") end
+function showAddChannel(parentDlg)
+  local layout = {LinearLayout, orientation="vertical", padding="20dp",
+    {EditText, id="edit_name", hint="نیم ایڈ کریں"},
+    {EditText, id="edit_url", hint="لنک ایڈ کریں"},
+    {Button, id="save_btn", text="Save"},
+    {Button, id="back_btn", text="Go Back"}
+  }
+  local dlg = LuaDialog(service)
+  dlg.setView(loadlayout(layout))
+  dlg.show()
+  save_btn.onClick = function()
+    local name = edit_name.getText().toString()
+    local url = edit_url.getText().toString()
+    if name ~= "" and url ~= "" then
+      table.insert(favorites, {name=name, url=url, cat="Favourite"})
+      saveFavorites(favorites)
+      speak("چینل محفوظ ہو گیا")
+      dlg.dismiss()
+      if parentDlg then parentDlg.dismiss() end
+      showList("Favourite")
+    else
+      speak("براہ کرم نام اور لنک دونوں درج کریں")
+    end
   end
+  back_btn.onClick = function() dlg.dismiss() end
 end
 
 function showList(category)
   current_category = category
-  local filtered = {}
-  
-  if category == "Favourite" then
-    filtered = favorites
-  else
-    for _, ch in ipairs(all_channels) do
-      if ch.cat == category then table.insert(filtered, ch) end
-    end
+  local source = (category == "Favourite") and favorites or {}
+  if category ~= "Favourite" then
+    for _, ch in ipairs(all_channels) do if ch.cat == category then table.insert(source, ch) end end
   end
-
-  local names = {}
-  for _, v in ipairs(filtered) do table.insert(names, v.name) end
-
+  
+  local filtered = source
   local layout = {LinearLayout, orientation="vertical", padding="15dp",
-    {TextView, text=category .. " Channels", textSize="18sp", gravity="center", layout_width="fill"},
+    {TextView, text="FM Radio Channel - Creator: Mohammad Usman", textSize="16sp", gravity="center", layout_marginBottom="5dp"},
+    {LinearLayout, orientation="horizontal",
+      {EditText, id="search_box", hint="Search...", layout_weight="1"},
+      {Button, id="search_btn", text="Search"}
+    },
     {ListView, id="list", layout_width="fill", layout_height="0dp", layout_weight="1"},
-    {Button, id="back_btn", text="Go Back", layout_width="fill", layout_marginTop="10dp"}
+    {Button, id="back_btn", text="Go Back", layout_width="fill"}
   }
-
-  dlg = LuaDialog(service)
+  
+  local dlg = LuaDialog(service)
   dlg.setView(loadlayout(layout))
   dlg.show()
-
-  list.setAdapter(ArrayAdapter(service, android.R.layout.simple_list_item_1, names))
-  if category ~= "Favourite" then list.setSelection(lastPosition) end
-
+  
+  local adapter = ArrayAdapter(service, android.R.layout.simple_list_item_1, {})
+  list.setAdapter(adapter)
+  
+  local function refresh(data)
+    adapter.clear()
+    for _, ch in ipairs(data) do adapter.add(ch.name) end
+  end
+  refresh(filtered)
+  list.setSelection(lastPosition)
+  
+  search_btn.onClick = function()
+    local q = search_box.getText().toString():lower()
+    filtered = {}
+    for _, ch in ipairs(source) do if ch.name:lower():find(q) then table.insert(filtered, ch) end end
+    refresh(filtered)
+  end
+  
   list.onItemClick = function(l,v,pos,id)
-    if category ~= "Favourite" then lastPosition = pos end
+    lastPosition = pos
     dlg.dismiss()
-    openPlayer(filtered[pos+1], pos+1)
+    openPlayer(filtered, pos+1, category == "Favourite")
   end
-
-  back_btn.onClick = function()
-    dlg.dismiss()
-    mainMenu()
-  end
+  back_btn.onClick = function() dlg.dismiss() mainMenu() end
 end
 
-function openPlayer(channel, indexOnList)
-  local favButtonText = "Add to Favourite"
-  if current_category == "Favourite" then
-    favButtonText = "Delete From Favourite"
-  end
-
-  local initBtnText = "Play"
-  if player.isPlaying() then initBtnText = "Pause" end
-
+function openPlayer(list, pos, isFavList)
+  local channel = list[pos]
   local layout = {LinearLayout, orientation="vertical", padding="15dp",
-    {TextView, text=channel.name, textSize="18sp", gravity="center", layout_width="fill"},
-    {Button, id="play_pause_btn", text=initBtnText, layout_width="fill"},
-    {Button, id="fav_btn", text=favButtonText, layout_width="fill"},
+    {TextView, text=channel.name, textSize="18sp", gravity="center", layout_marginBottom="10dp"},
+    {Button, id="play_pause_btn", text="Play", layout_width="fill"},
+    {LinearLayout, orientation="horizontal", layout_width="fill",
+      {Button, id="next_btn", text="Next", layout_weight="1"},
+      {Button, id="prev_btn", text="Previous", layout_weight="1"}
+    },
+    {Button, id="vol_up", text="Volume Up", layout_width="fill"},
+    {Button, id="vol_down", text="Volume Down", layout_width="fill"},
+    {Button, id="fav_btn", text=isFavList and "Remove from Favourite" or "Add to Favourite", layout_width="fill"},
     {Button, id="back_btn", text="Back", layout_width="fill"}
   }
-
-  dlg2 = LuaDialog(service)
+  local dlg2 = LuaDialog(service)
   dlg2.setView(loadlayout(layout))
   dlg2.show()
-
+  
   play_pause_btn.onClick = function()
-    if player.isPlaying() then
-      player.stop()
-      player.reset()
-      play_pause_btn.setText("Play")
-      speak("Radio band ho gaya hai")
-    else
-      startStreaming(channel.url, channel.name, play_pause_btn)
+    if player.isPlaying() then 
+      player.stop() 
+      play_pause_btn.setText("Play") 
+      speak("چینل بند ہو گیا")
+    else 
+      startStreaming(channel.url, play_pause_btn, channel.name) 
     end
   end
-
+  
+  next_btn.onClick = function()
+    if pos < #list then
+      pos = pos + 1
+      channel = list[pos]
+      startStreaming(channel.url, play_pause_btn, channel.name)
+      dlg2.setTitle(channel.name)
+    end
+  end
+  
+  prev_btn.onClick = function()
+    if pos > 1 then
+      pos = pos - 1
+      channel = list[pos]
+      startStreaming(channel.url, play_pause_btn, channel.name)
+      dlg2.setTitle(channel.name)
+    end
+  end
+  
+  vol_up.onClick = function()
+    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+    updateVolTts()
+  end
+  
+  vol_down.onClick = function()
+    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+    updateVolTts()
+  end
+  
   fav_btn.onClick = function()
-    if current_category == "Favourite" then
-      table.remove(favorites, indexOnList)
-      speak("Channel favourite se delete ho gaya")
-      dlg2.dismiss()
+    if isFavList then
+      for i, ch in ipairs(favorites) do if ch.name == channel.name then table.remove(favorites, i) break end end
+      saveFavorites(favorites) 
+      speak("فہرست سے ہٹا دیا")
+      dlg2.dismiss() 
       showList("Favourite")
     else
       local exists = false
-      for _, fav in ipairs(favorites) do
-        if fav.name == channel.name then exists = true break end
-      end
-      if not exists then
-        table.insert(favorites, channel)
-        speak("Favourite mein add ho gaya")
-      else
-        speak("Yeh pehle se add hai")
+      for _, ch in ipairs(favorites) do if ch.name == channel.name then exists = true break end end
+      if exists then 
+        speak("پہلے سے موجود ہے") 
+      else 
+        table.insert(favorites, channel) 
+        saveFavorites(favorites) 
+        speak("فہرست میں شامل کر دیا") 
       end
     end
   end
-
-  back_btn.onClick = function()
+  back_btn.onClick = function() 
     if player.isPlaying() then player.stop() end
-    player.reset()
-    dlg2.dismiss()
-    showList(current_category)
+    dlg2.dismiss() 
+    showList(current_category) 
   end
 end
 
--- Fixed About and Support Menu Panel (Removed textStyle=bold to fix crash)
-function showAboutMenu()
+function showAbout()
   local layout = {LinearLayout, orientation="vertical", padding="20dp",
-    {TextView, id="title_txt", text="Creator Mohammed Usman", textSize="18sp", gravity="center", layout_bottomData="10dp"},
-    {TextView, text="WhatsApp: " .. whatsapp_number, textSize="16sp", gravity="center", layout_marginBottom="20dp"},
-    {Button, id="copy_btn", text="Copy Number", layout_width="fill"},
-    {Button, id="contact_btn", text="Contact on WhatsApp", layout_width="fill"},
-    {Button, id="about_back_btn", text="Go Back", layout_width="fill", layout_marginTop="15dp"}
+    {TextView, text="Creator: Mohammad Usman", textSize="20sp", gravity="center"},
+    {TextView, text="WhatsApp: "..whatsapp_number, textSize="18sp", gravity="center", layout_marginBottom="10dp"},
+    {Button, id="copy_btn", text="Copy WhatsApp Number", layout_width="fill"},
+    {Button, id="wa_btn", text="Contact WhatsApp", layout_width="fill"},
+    {Button, id="back_btn", text="Go Back", layout_width="fill"}
   }
-
-  dlgAbout = LuaDialog(service)
+  local dlgAbout = LuaDialog(service)
   dlgAbout.setView(loadlayout(layout))
-  
-  -- Programmatically text ko bold kiya taaki har Android version par fast aur bagair error ke chale
-  title_txt.setTypeface(Typeface.DEFAULT_BOLD)
-  
   dlgAbout.show()
-
-  copy_btn.onClick = function()
-    local context = service.getContext()
-    local clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-    import "android.content.ClipData"
-    local clip = ClipData.newPlainText("WhatsApp Number", whatsapp_number)
-    clipboard.setPrimaryClip(clip)
-    speak("WhatsApp number copy ho gaya hai")
-  end
-
-  contact_btn.onClick = function()
-    local url = "https://api.whatsapp.com/send?phone=" .. whatsapp_number
-    local intent = Intent(Intent.ACTION_VIEW)
-    intent.setData(Uri.parse(url))
-    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    pcall(function() service.getContext().startActivity(intent) end)
-  end
-
-  about_back_btn.onClick = function()
-    dlgAbout.dismiss()
-    mainMenu()
-  end
+  wa_btn.onClick = function() service.getContext().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/"..whatsapp_number))) end
+  copy_btn.onClick = function() service.getContext().getSystemService(Context.CLIPBOARD_SERVICE).setPrimaryClip(ClipData.newPlainText("label", whatsapp_number)) speak("نمبر کاپی ہو گیا") end
+  back_btn.onClick = function() dlgAbout.dismiss() mainMenu() end
 end
 
 function mainMenu()
   local layout = {LinearLayout, orientation="vertical", padding="20dp",
-    {TextView, text="FM radio channel creator Mohammed Usman", textSize="16sp", gravity="center", layout_marginBottom="20dp"},
-    {Button, id="pak_btn", text="Pakistan FM Radio Channel", layout_width="fill"},
-    {Button, id="urdu_btn", text="Urdu FM Radio Channel", layout_width="fill"},
-    {Button, id="eng_btn", text="English Channel", layout_width="fill"},
-    {Button, id="sports_btn", text="Sports Channel", layout_width="fill"},
-    {Button, id="fav_menu_btn", text="Favorite Channel", layout_width="fill"},
-    {Button, id="about_btn", text="About and Support", layout_width="fill"}, 
-    {Button, id="close_btn", text="Go Back", layout_width="fill", layout_marginTop="10dp"}
+    {TextView, text="FM Radio Channel - Creator: Mohammad Usman", textSize="16sp", gravity="center", layout_marginBottom="20dp"},
+    {Button, id="fav", text="Favorite"},
+    {Button, id="pak", text="Pakistan"},
+    {Button, id="ind", text="India"},
+    {Button, id="eng", text="English"},
+    {Button, id="spo", text="Sports"},
+    {Button, id="add_ch", text="Add Channel"},
+    {Button, id="abt", text="About & Support"},
+    {Button, id="exit_btn", text="Go Back", layout_width="fill", layout_marginTop="10dp"}
   }
-  
-  dlgMain = LuaDialog(service)
+  local dlgMain = LuaDialog(service)
   dlgMain.setView(loadlayout(layout))
   dlgMain.show()
-
-  pak_btn.onClick = function() dlgMain.dismiss() showList("Pakistan") end
-  urdu_btn.onClick = function() dlgMain.dismiss() showList("Urdu") end
-  eng_btn.onClick = function() dlgMain.dismiss() showList("English") end
-  sports_btn.onClick = function() dlgMain.dismiss() showList("Sports") end
-  fav_menu_btn.onClick = function() dlgMain.dismiss() showList("Favourite") end
-  about_btn.onClick = function() dlgMain.dismiss() showAboutMenu() end 
   
-  close_btn.onClick = function()
-    pcall(function()
-      if player then
-        if player.isPlaying() then player.stop() end
-        player.release()
-      end
-    end)
-    dlgMain.dismiss()
-  end
+  fav.onClick = function() dlgMain.dismiss() showList("Favourite") end
+  pak.onClick = function() dlgMain.dismiss() showList("Pakistan") end
+  ind.onClick = function() dlgMain.dismiss() showList("India") end
+  eng.onClick = function() dlgMain.dismiss() showList("English") end
+  spo.onClick = function() dlgMain.dismiss() showList("Sports") end
+  add_ch.onClick = function() showAddChannel(dlgMain) end
+  abt.onClick = function() dlgMain.dismiss() showAbout() end
+  exit_btn.onClick = function() if player then player.stop() player.release() end dlgMain.dismiss() end
 end
 
 mainMenu()
