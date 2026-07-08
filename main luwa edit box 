@@ -11,6 +11,10 @@ import "android.content.ClipboardManager"
 import "android.content.ClipData"
 import "org.json.JSONArray"
 import "org.json.JSONObject"
+import "android.os.Handler"
+import "android.os.Looper"
+import "android.speech.tts.TextToSpeech"
+import "java.util.Locale"
 
 -- =============================================
 -- Extension Name: FM Radio Channel
@@ -23,9 +27,50 @@ player = MediaPlayer()
 lastPosition = 0
 current_category = "" 
 whatsapp_number = "923261421100"
+currentChannelName = ""
+
+-- Sleep Timer globals
+sleepTimerRunnable = nil
+currentPlayerDialog = nil
 
 local prefs = service.getContext().getSharedPreferences("fm_favorites", Context.MODE_PRIVATE)
 local audioManager = service.getContext().getSystemService(Context.AUDIO_SERVICE)
+local mainHandler = Handler(Looper.getMainLooper())
+
+-- TTS Setup
+local tts = nil
+local ttsReady = false
+
+function initTTS()
+  tts = TextToSpeech(service, TextToSpeech.OnInitListener{
+    onInit = function(status)
+      if status == TextToSpeech.SUCCESS then
+        pcall(function()
+          local result = tts.setLanguage(Locale.US)
+          if result == TextToSpeech.LANG_MISSING_DATA or result == TextToSpeech.LANG_NOT_SUPPORTED then
+            result = tts.setLanguage(Locale.ENGLISH)
+          end
+          if result == TextToSpeech.LANG_MISSING_DATA or result == TextToSpeech.LANG_NOT_SUPPORTED then
+            result = tts.setLanguage(Locale.UK)
+          end
+        end)
+        ttsReady = true
+      end
+    end
+  })
+end
+
+-- Call init
+initTTS()
+
+-- TTS Function
+function speak(text)
+  if tts and ttsReady then
+    pcall(function()
+      tts.speak(text, TextToSpeech.QUEUE_FLUSH, nil, nil)
+    end)
+  end
+end
 
 function loadFavorites()
   local json = prefs.getString("fav_list", "[]")
@@ -53,58 +98,82 @@ end
 favorites = loadFavorites()
 
 all_channels = {
-  {name="Radio Pakistan World Service", url="https://whmsonic.radio.gov.pk:7005/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Radio Pakistan External Service", url="https://whmsonic.radio.gov.pk:7006/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Islamabad Station (PBC)", url="https://whmsonic.radio.gov.pk:7003/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Planet FM 87.6 Islamabad", url="https://whmsonic.radio.gov.pk:7042/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="NCAC Radio Islamabad", url="https://whmsonic.radio.gov.pk:7004/stream?type=http&nocache=12", cat="Pakistan"},
+  -- Radio Pakistan (PBC) Stations
+  {name="Saut-ul-Quran", url="https://whmsonic.radio.gov.pk:7002/stream?type=http&nocache=12", cat="Pakistan"},
   {name="FM 101 Islamabad", url="https://whmsonic.radio.gov.pk:7008/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="FM 93 Lahore", url="https://whmsonic.radio.gov.pk:8088/stream?type=http&nocache=4", cat="Pakistan"},
-  {name="FM 101 Lahore", url="https://whmsonic.radio.gov.pk:7000/101lahore", cat="Pakistan"},
-  {name="FM 93 Lahore (Alt)", url="https://whmsonic.radio.gov.pk:7011/stream", cat="Pakistan"},
-  {name="Lahore MW", url="https://whmsonic.radio.gov.pk:8026/relay", cat="Pakistan"},
-  {name="FM 93 Karachi", url="https://whmsonic.radio.gov.pk:7022/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="FM 101 Karachi", url="https://whmsonic.radio.gov.pk:8048/stream", cat="Pakistan"},
-  {name="MW 639 Karachi", url="https://whmsonic.radio.gov.pk:7000/MW639khi?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 93 Multan", url="https://whmsonic.radio.gov.pk:7014/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="FM 101 Multan", url="https://whmsonic.radio.gov.pk:8032/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Multan MW (PBC)", url="https://whmsonic.radio.gov.pk:8034/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Planet FM 87.6", url="https://whmsonic.radio.gov.pk:7042/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Islamabad Station", url="https://whmsonic.radio.gov.pk:7003/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="NCAC", url="https://whmsonic.radio.gov.pk:7004/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="World Service", url="https://whmsonic.radio.gov.pk:7005/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="External Service", url="https://whmsonic.radio.gov.pk:7006/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Sports & Health Channel", url="https://whmsonic.radio.gov.pk:7007/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Technology Channel", url="https://whmsonic.radio.gov.pk:8094/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Environment", url="https://whmsonic.radio.gov.pk:8102/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Health", url="https://whmsonic.radio.gov.pk:7000/Health", cat="Pakistan"},
+  {name="Kids", url="https://whmsonic.radio.gov.pk:7000/Kids", cat="Pakistan"},
+  {name="FM 101 Bahawalpur", url="https://whmsonic.radio.gov.pk:8020/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="MW Bahawalpur", url="https://whmsonic.radio.gov.pk:8092/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 93 Faisalabad", url="https://whmsonic.radio.gov.pk:8022/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 101 Faisalabad", url="https://whmsonic.radio.gov.pk:8024/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 93 Rawalpindi", url="https://whmsonic.radio.gov.pk:8036/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="Peshawar MW (PBC)", url="https://whmsonic.radio.gov.pk:8072/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 101 Peshawar", url="https://whmsonic.radio.gov.pk:8070/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="Quetta MW (PBC)", url="https://whmsonic.radio.gov.pk:8060/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 101 Quetta", url="https://whmsonic.radio.gov.pk:8058/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="FM 101 Quetta (Alt)", url="https://whmsonic.radio.gov.pk:7028/;", cat="Pakistan"},
-  {name="FM 101 Hyderabad", url="https://whmsonic.radio.gov.pk:8044/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Hyderabad MW 1008KHz", url="https://whmsonic.radio.gov.pk:8042/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="FM 101 Sargodha", url="https://whmsonic.radio.gov.pk:8040/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 101 Sialkot", url="https://whmsonic.radio.gov.pk:8038/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Lahore", url="https://whmsonic.radio.gov.pk:8088/stream?type=http&nocache=4", cat="Pakistan"},
+  {name="FM 101 Lahore", url="https://whmsonic.radio.gov.pk:7000/101lahore", cat="Pakistan"},
+  {name="Lahore MW", url="https://whmsonic.radio.gov.pk:8026/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 93 Mianwali", url="https://whmsonic.radio.gov.pk:8028/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="FM93 Skardu", url="https://whmsonic.radio.gov.pk:8104/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="MW 1557 Skardu", url="https://whmsonic.radio.gov.pk:8080/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Multan", url="https://whmsonic.radio.gov.pk:7014/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Multan", url="https://whmsonic.radio.gov.pk:8032/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Multan MW", url="https://whmsonic.radio.gov.pk:8034/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 93 Rawalpindi", url="https://whmsonic.radio.gov.pk:8036/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Sialkot", url="https://whmsonic.radio.gov.pk:8038/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Sargodha", url="https://whmsonic.radio.gov.pk:8040/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="Hyderabad MW 1008KHz", url="https://whmsonic.radio.gov.pk:8042/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Hyderabad", url="https://whmsonic.radio.gov.pk:8044/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Karachi", url="https://whmsonic.radio.gov.pk:8048/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 93 Karachi", url="https://whmsonic.radio.gov.pk:7022/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Larkana", url="https://whmsonic.radio.gov.pk:8050/stream?type=http&nocache=12", cat="Pakistan"},
   {name="FM 101 Mithi", url="https://whmsonic.radio.gov.pk:8052/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="MW Bahawalpur (PBC)", url="https://whmsonic.radio.gov.pk:8092/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="FM 101 Bahawalpur", url="http://whmsonic.radio.gov.pk:8020/;", cat="Pakistan"},
+  {name="FM 101 Khairpur", url="https://whmsonic.radio.gov.pk:8054/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="MW 639 Karachi", url="https://whmsonic.radio.gov.pk:7000/MW639khi?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101.4 Bhitshah", url="https://whmsonic.radio.gov.pk:8098/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Quetta", url="https://whmsonic.radio.gov.pk:8058/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="Quetta MW", url="https://whmsonic.radio.gov.pk:8060/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="Khuzdar MW 567", url="https://whmsonic.radio.gov.pk:8062/stream?type=http&nocache=12", cat="Pakistan"},
+  {name="FM 101 Peshawar", url="https://whmsonic.radio.gov.pk:8070/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="Peshawar MW", url="https://whmsonic.radio.gov.pk:8072/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Kohat", url="https://whmsonic.radio.gov.pk:8068/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 101 Abbotabad", url="https://whmsonic.radio.gov.pk:8064/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Chitral", url="https://whmsonic.radio.gov.pk:8066/relay?type=http&nocache=9", cat="Pakistan"},
   {name="D.I. Khan MW 711", url="https://whmsonic.radio.gov.pk:7000/Dikhan?type=http&nocache=9", cat="Pakistan"},
-  {name="Sports & Health Channel", url="https://whmsonic.radio.gov.pk:7007/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Suno FM", url="https://stream.zeno.fm/u9hkurj5kjkuv", cat="Pakistan"},
-  {name="Suno FM Saraiki", url="http://stream.zeno.fm/evbchqja5oetv", cat="Pakistan"},
-  {name="Suno FM Balochi", url="https://stream.zeno.fm/nvvbgyewxksuv", cat="Pakistan"},
+  {name="FM 101 Mirpur", url="https://whmsonic.radio.gov.pk:8078/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="AK-RADIO-Tarakhel", url="https://whmsonic.radio.gov.pk:8076/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Muzaffarabad", url="https://whmsonic.radio.gov.pk:7000/93muzaffarabad?type=http&nocache=9", cat="Pakistan"},
+  {name="Azad Kashmir Radio Mirpur", url="https://whmsonic.radio.gov.pk:8074/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="Gilgit MW 1512Khz", url="https://whmsonic.radio.gov.pk:8082/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM 93 Gilgit", url="https://whmsonic.radio.gov.pk:8090/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="MW 1557 Skardu", url="https://whmsonic.radio.gov.pk:8080/relay?type=http&nocache=9", cat="Pakistan"},
+  {name="FM93 Skardu", url="https://whmsonic.radio.gov.pk:8104/relay?type=http&nocache=9", cat="Pakistan"},
+
+  -- Other Pakistan Channels
+  {name="Shalimar FM 94.6", url="http://s3.voscast.com:8534/;stream.mp3", cat="Pakistan"},
+  {name="Radio Jeevay Pakistan FM Network", url="https://s7.reliastream.com/proxy/tahash07?mp=/stream", cat="Pakistan"},
+  {name="FM 100 Lahore", url="https://cast4.servcast.net/proxy/fm100lhr/stream", cat="Pakistan"},
+  {name="Hot FM 105 Karachi", url="https://cc.vmakerhost.com/proxy/sc_khi1?mp=/stream", cat="Pakistan"},
+  {name="Hum FM 106.2 (Just Music!)", url="https://ice10.securenetsystems.net/HUMFM", cat="Pakistan"},
+  {name="Suno FM Urdu", url="https://stream.sunofmradio.com:8443/URDURECORD", cat="Pakistan"},
+  {name="Suno FM Pashto", url="https://stream.sunofmradio.com:8443/PSCRECORD", cat="Pakistan"},
+  {name="Suno FM Balochi", url="https://stream.sunofmradio.com:8443/QUETARECORD", cat="Pakistan"},
+  {name="Suno FM Balti", url="https://stream.sunofmradio.com:8443/GILGITRECORD", cat="Pakistan"},
+  {name="Suno FM Shina", url="https://stream.sunofmradio.com:8443/GBRECORD", cat="Pakistan"},
+  {name="Suno FM Saraiki", url="https://stream.sunofmradio.com:8443/MultanStudio", cat="Pakistan"},
+  {name="Suno FM Kashmiri", url="https://stream.sunofmradio.com:8443/KASHMIRRECORD", cat="Pakistan"},
+  {name="Suno FM Sindhi", url="https://stream.sunofmradio.com:8443/KCIRECORD", cat="Pakistan"},
   {name="FM 100 Pakistan", url="http://162.244.80.118:4900/;stream.mp3", cat="Pakistan"},
   {name="FM 100 Pakistan Karachi", url="http://162.244.80.118:3024/stream.mp3?ver=349829", cat="Pakistan"},
   {name="FM 100 Islamabad (Alt)", url="http://162.244.80.118:4900/stream.mp3?ver=604498", cat="Pakistan"},
-  {name="FM 106.2 Yes Music Lahore", url="http://66.45.232.131:9994/stream", cat="Pakistan"},
-  {name="FM 106.2 Yes Music Islamabad", url="http://66.45.232.131:9994/stream", cat="Pakistan"},
-  {name="FM 106.2 Yes Music Karachi", url="http://66.45.232.131:9994/stream", cat="Pakistan"},
   {name="Samaa FM 107.4", url="https://samaakhi107-itelservices.radioca.st/stream", cat="Pakistan"},
   {name="Mera FM 107.4 Lahore", url="https://samaalhr107-itelservices.radioca.st/stream", cat="Pakistan"},
   {name="Apna Karachi 107 FM", url="http://streaming.apnakarachi107.fm:7070/live107", cat="Pakistan"},
-  {name="Hum FM 106.2", url="https://server.mediacast4u.stream/8002/stream", cat="Pakistan"},
-  {name="Awam FM", url="http://server.mediacast4u.stream/8010/stream", cat="Pakistan"},
+  {name="Awam FM", url="http://server.mediacast4u.stream:8010/stream", cat="Pakistan"},
   {name="Hot FM 89 Layyah", url="https://stream.zeno.fm/rupdjglocbvtv", cat="Pakistan"},
-  {name="Hot FM Karachi", url="https://cc.vmakerhost.com/proxy/sc_khi1?mp=/stream", cat="Pakistan"},
   {name="Hot FM Sanghar", url="http://cc.vmakerhost.com/proxy/sc_sang?mp=/stream", cat="Pakistan"},
   {name="Hot FM 105 Badin", url="http://cc.vmakerhost.com:8000/listen.mp3", cat="Pakistan"},
   {name="ON FM 91.6 Khanewal", url="https://stream.zeno.fm/evbchqja5oetv", cat="Pakistan"},
@@ -112,8 +181,6 @@ all_channels = {
   {name="Radio Jeevay Khanewal", url="http://s7.reliastream.com:8218/Tune-In", cat="Pakistan"},
   {name="Radio Jeevay Bahawalpur", url="http://canada1.reliastream.com:8155/;", cat="Pakistan"},
   {name="Buzz FM", url="http://fusion.shoutca.st:8112/stream", cat="Pakistan"},
-  {name="Saut-ul-Quran (Islamabad)", url="https://whmsonic.radio.gov.pk:7002/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Saut ul Quran (Alt)", url="https://whmsonic.radio.gov.pk:7010/stream", cat="Pakistan"},
   {name="Quran Radio Makkah", url="https://stream.radiojar.com/8s5u5tpdtwzuv", cat="Pakistan"},
   {name="Quran Radio Madinah", url="https://stream.radiojar.com/0tpy1h0kxtzuv", cat="Pakistan"},
   {name="Radio Pak Filmi", url="https://stream.zeno.fm/0r0xa792kwzuv", cat="Pakistan"},
@@ -122,6 +189,8 @@ all_channels = {
   {name="All 4Masti", url="https://stream.zeno.fm/31huk9y8u68uv", cat="Pakistan"},
   {name="All 4Masti Sargodha", url="https://stream.zeno.fm/bahhkuge5zhvv", cat="Pakistan"},
   {name="Hot FM 105 Quetta", url="http://cc.vmakerhost.com:8066/;", cat="Pakistan"},
+
+  -- India Channels
   {name="AIR Live 1", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", cat="India"},
   {name="Vividh Bharati", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio012/playlist.m3u8", cat="India"},
   {name="FM Gold Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio214/playlist.m3u8", cat="India"},
@@ -154,6 +223,132 @@ all_channels = {
   {name="AIR Varanasi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio149/playlist.m3u8", cat="India"},
   {name="AIR Lucknow (National)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio144/playlist.m3u8", cat="India"},
   {name="AIR Jalandhar", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio205/playlist.m3u8", cat="India"},
+  {name="AIR Agartala (Tripura)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio165/playlist.m3u8", cat="India"},
+  {name="AIR Aizawl (Mizoram)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio166/playlist.m3u8", cat="India"},
+  {name="AIR Akola (Maharashtra)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio080/playlist.m3u8", cat="India"},
+  {name="AIR Aligarh (UP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio148/playlist.m3u8", cat="India"},
+  {name="AIR Anantapur (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio134/playlist.m3u8", cat="India"},
+  {name="AIR Aurangabad (Maharashtra)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio087/playlist.m3u8", cat="India"},
+  {name="AIR Bareilly (UP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio152/playlist.m3u8", cat="India"},
+  {name="AIR Bellary (Karnataka)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio116/playlist.m3u8", cat="India"},
+  {name="AIR Bengali (Regional)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio170/playlist.m3u8", cat="India"},
+  {name="AIR Bikaner (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio125/playlist.m3u8", cat="India"},
+  {name="AIR Bilaspur (Chhattisgarh)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio094/playlist.m3u8", cat="India"},
+  {name="AIR Chitradurga (Karnataka)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio119/playlist.m3u8", cat="India"},
+  {name="AIR Coimbatore (Tamil Nadu)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio104/playlist.m3u8", cat="India"},
+  {name="AIR Cuttack (Odisha)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio181/playlist.m3u8", cat="India"},
+  {name="AIR Dehradun (Uttarakhand)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio151/playlist.m3u8", cat="India"},
+  {name="AIR Dharwad (Karnataka)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio110/playlist.m3u8", cat="India"},
+  {name="AIR FM Gold Jalandhar (Punjab)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio208/playlist.m3u8", cat="India"},
+  {name="AIR FM Rainbow Amritsar (Punjab)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio210/playlist.m3u8", cat="India"},
+  {name="AIR Gangtok (Sikkim)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio169/playlist.m3u8", cat="India"},
+  {name="AIR Gorakhpur (UP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio142/playlist.m3u8", cat="India"},
+  {name="AIR Gujarati (Regional)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio071/playlist.m3u8", cat="India"},
+  {name="AIR Gulbarga (Karnataka)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio115/playlist.m3u8", cat="India"},
+  {name="AIR Guwahati (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio163/playlist.m3u8", cat="India"},
+  {name="AIR Hassan (Karnataka)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio118/playlist.m3u8", cat="India"},
+  {name="AIR Imphal (Manipur)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio168/playlist.m3u8", cat="India"},
+  {name="AIR Itanagar (Arunachal)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio167/playlist.m3u8", cat="India"},
+  {name="AIR Jaisalmer (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio127/playlist.m3u8", cat="India"},
+  {name="AIR Jalgaon (Maharashtra)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio082/playlist.m3u8", cat="India"},
+  {name="AIR Jamshedpur (Jharkhand)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio099/playlist.m3u8", cat="India"},
+  {name="AIR Jeypore (Odisha)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio183/playlist.m3u8", cat="India"},
+  {name="AIR Jhansi (UP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio154/playlist.m3u8", cat="India"},
+  {name="AIR Kadapa (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio136/playlist.m3u8", cat="India"},
+  {name="AIR Kannada (Regional)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio109/playlist.m3u8", cat="India"},
+  {name="AIR Karwar (Karnataka)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio120/playlist.m3u8", cat="India"},
+  {name="AIR Kohima (Nagaland)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio190/playlist.m3u8", cat="India"},
+  {name="AIR Kota (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio123/playlist.m3u8", cat="India"},
+  {name="AIR Kozhikode (Kerala)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio113/playlist.m3u8", cat="India"},
+  {name="AIR Kurnool (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio133/playlist.m3u8", cat="India"},
+  {name="AIR Madurai (TN)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio106/playlist.m3u8", cat="India"},
+  {name="AIR Malayalam (Regional)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio112/playlist.m3u8", cat="India"},
+  {name="AIR Mangalore (Karnataka)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio117/playlist.m3u8", cat="India"},
+  {name="AIR Markapur (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio137/playlist.m3u8", cat="India"},
+  {name="AIR Marathi (Regional)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio081/playlist.m3u8", cat="India"},
+  {name="AIR Mathura (UP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio150/playlist.m3u8", cat="India"},
+  {name="AIR Mysore (Karnataka)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio111/playlist.m3u8", cat="India"},
+  {name="AIR Najibabad (UP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio141/playlist.m3u8", cat="India"},
+  {name="AIR Ongole (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio132/playlist.m3u8", cat="India"},
+  {name="AIR Panaji (Goa)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio079/playlist.m3u8", cat="India"},
+  {name="AIR Port Blair (Andaman)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio191/playlist.m3u8", cat="India"},
+  {name="AIR Puducherry (UT)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio192/playlist.m3u8", cat="India"},
+  {name="AIR Punjabi (Regional)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio201/playlist.m3u8", cat="India"},
+  {name="AIR Raipur (Chhattisgarh)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio092/playlist.m3u8", cat="India"},
+  {name="AIR Rajahmundry (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio131/playlist.m3u8", cat="India"},
+  {name="AIR Rajkot (Gujarat)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio072/playlist.m3u8", cat="India"},
+  {name="AIR Rampur (UP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio147/playlist.m3u8", cat="India"},
+  {name="AIR Ranchi (Jharkhand)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio100/playlist.m3u8", cat="India"},
+  {name="AIR Ratnagiri (Maharashtra)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio086/playlist.m3u8", cat="India"},
+  {name="AIR Sambalpur (Odisha)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio182/playlist.m3u8", cat="India"},
+  {name="AIR Sangli (Maharashtra)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio083/playlist.m3u8", cat="India"},
+  {name="AIR Shillong (Meghalaya)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio162/playlist.m3u8", cat="India"},
+  {name="AIR Solapur (Maharashtra)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio088/playlist.m3u8", cat="India"},
+  {name="AIR Surat (Gujarat)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio076/playlist.m3u8", cat="India"},
+  {name="AIR Tamil (Regional)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio107/playlist.m3u8", cat="India"},
+  {name="AIR Telugu (Regional)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio108/playlist.m3u8", cat="India"},
+  {name="AIR Thrissur (Kerala)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio114/playlist.m3u8", cat="India"},
+  {name="AIR Tirupati (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio135/playlist.m3u8", cat="India"},
+  {name="AIR Trichy (TN)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio105/playlist.m3u8", cat="India"},
+  {name="AIR Vadodara (Gujarat)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio078/playlist.m3u8", cat="India"},
+  {name="AIR Vijayawada (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio101/playlist.m3u8", cat="India"},
+  {name="AIR Visakhapatnam (AP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio103/playlist.m3u8", cat="India"},
+  {name="AIR Banswara (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio128/playlist.m3u8", cat="India"},
+  {name="AIR Barmer (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio130/playlist.m3u8", cat="India"},
+  {name="AIR Churu (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio124/playlist.m3u8", cat="India"},
+  {name="AIR Dungarpur (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio129/playlist.m3u8", cat="India"},
+  {name="AIR Gwalior (MP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio091/playlist.m3u8", cat="India"},
+  {name="AIR Khandwa (MP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio093/playlist.m3u8", cat="India"},
+  {name="AIR Rewa (MP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio095/playlist.m3u8", cat="India"},
+  {name="AIR Sagar (MP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio096/playlist.m3u8", cat="India"},
+  {name="AIR Shivpuri (MP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio097/playlist.m3u8", cat="India"},
+  {name="AIR Chhatarpur (MP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio098/playlist.m3u8", cat="India"},
+  {name="AIR Agra (UP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio140/playlist.m3u8", cat="India"},
+  {name="AIR Bhavnagar (Gujarat)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio073/playlist.m3u8", cat="India"},
+  {name="AIR Bhuj (Gujarat)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio074/playlist.m3u8", cat="India"},
+  {name="AIR Godhra (Gujarat)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio077/playlist.m3u8", cat="India"},
+  {name="AIR Tawang (Arunachal)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio193/playlist.m3u8", cat="India"},
+  {name="AIR Bomdila (Arunachal)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio194/playlist.m3u8", cat="India"},
+  {name="AIR Tezu (Arunachal)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio195/playlist.m3u8", cat="India"},
+  {name="AIR Pasighat (Arunachal)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio196/playlist.m3u8", cat="India"},
+  {name="AIR Ziro (Arunachal)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio197/playlist.m3u8", cat="India"},
+  {name="AIR Diphu (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio198/playlist.m3u8", cat="India"},
+  {name="AIR Silchar (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio199/playlist.m3u8", cat="India"},
+  {name="AIR Haflong (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio200/playlist.m3u8", cat="India"},
+  {name="AIR Kokrajhar (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio202/playlist.m3u8", cat="India"},
+  {name="AIR Dhubri (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio203/playlist.m3u8", cat="India"},
+  {name="AIR Jorhat (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio204/playlist.m3u8", cat="India"},
+  {name="AIR Bikaner City (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio206/playlist.m3u8", cat="India"},
+  {name="AIR Bharatpur (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio209/playlist.m3u8", cat="India"},
+  {name="AIR Sikar (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio211/playlist.m3u8", cat="India"},
+  {name="AIR Jhunjhunu (Rajasthan)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio212/playlist.m3u8", cat="India"},
+  {name="AIR Anantnag (J&K)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio213/playlist.m3u8", cat="India"},
+  {name="AIR Baramulla (J&K)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio215/playlist.m3u8", cat="India"},
+  {name="AIR Kathua (J&K)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio217/playlist.m3u8", cat="India"},
+  {name="AIR Poonch (J&K)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio224/playlist.m3u8", cat="India"},
+  {name="AIR Doda (J&K)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio225/playlist.m3u8", cat="India"},
+  {name="AIR Bilaspur City (HP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio226/playlist.m3u8", cat="India"},
+  {name="AIR Dharamshala (HP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio227/playlist.m3u8", cat="India"},
+  {name="AIR Hamirpur (HP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio228/playlist.m3u8", cat="India"},
+  {name="AIR Mandi (HP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio229/playlist.m3u8", cat="India"},
+  {name="AIR Kullu (HP)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio230/playlist.m3u8", cat="India"},
+  {name="AIR Ranchi City (Jharkhand)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio231/playlist.m3u8", cat="India"},
+  {name="AIR Bokaro (Jharkhand)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio232/playlist.m3u8", cat="India"},
+  {name="AIR Dhanbad (Jharkhand)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio233/playlist.m3u8", cat="India"},
+  {name="AIR Deoghar (Jharkhand)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio234/playlist.m3u8", cat="India"},
+  {name="AIR Dumka (Jharkhand)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio235/playlist.m3u8", cat="India"},
+  {name="AIR Bhubaneswar (Odisha)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio236/playlist.m3u8", cat="India"},
+  {name="AIR Berhampur (Odisha)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio237/playlist.m3u8", cat="India"},
+  {name="AIR Rourkela (Odisha)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio238/playlist.m3u8", cat="India"},
+  {name="AIR Balasore (Odisha)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio239/playlist.m3u8", cat="India"},
+  {name="AIR Koraput (Odisha)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio240/playlist.m3u8", cat="India"},
+  {name="AIR Itanagar City (Arunachal)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio241/playlist.m3u8", cat="India"},
+  {name="AIR Tinsukia (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio242/playlist.m3u8", cat="India"},
+  {name="AIR Tezpur (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio243/playlist.m3u8", cat="India"},
+  {name="AIR Nagaon (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio244/playlist.m3u8", cat="India"},
+  {name="AIR Barpeta (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio245/playlist.m3u8", cat="India"},
+
+  -- English Channels
   {name="BBC World Service", url="http://stream.live.vc.bbcmedia.co.uk/bbc_world_service", cat="English"},
   {name="BBC Arabic", url="http://stream.live.vc.bbcmedia.co.uk/bbc_arabic_radio", cat="English"},
   {name="VOA Urdu", url="https://voa-28.akacast.akamaistream.net/7/368/437800/v1/ibb.akacast.akamaistream.net/voa-urdu", cat="English"},
@@ -165,60 +360,124 @@ all_channels = {
   {name="Swiss Jazz Radio", url="http://stream.srg-ssr.ch/m/rsj/mp3_128", cat="English"},
   {name="RTÉ Radio 1 News Ireland", url="http://icecast2.rte.ie/radio1", cat="English"},
   {name="Newstalk Ireland", url="https://stream.audioxi.com/NT", cat="English"},
+
+  -- Sports Channels
   {name="TalkSPORT UK", url="https://radio.talksport.com/stream", cat="Sports"},
   {name="All India Radio Sports", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", cat="Sports"},
   {name="Cricket Fever Radio", url="http://stream.zeno.fm/0r0xa792kwzuv", cat="Sports"}
 }
 
-local currentVolume = 0
+function startStreaming(url, playPauseBtn, name)
+  pcall(function()
+    player.reset()
+    player.setAudioStreamType(AudioManager.STREAM_MUSIC)
+    player.setDataSource(url)
+    player.prepareAsync()
 
--- Audio Ducking Function
-function speak(msg)
-  if service and service.speak then
-    local am = audioManager
-    local stream = AudioManager.STREAM_MUSIC
-    currentVolume = am.getStreamVolume(stream)
-    am.setStreamVolume(stream, math.floor(am.getStreamMaxVolume(stream) * 0.2), 0)
-    service.speak(msg)
-    task(3000, function() am.setStreamVolume(stream, currentVolume, 0) end)
+    local retried = false
+
+    player.setOnPreparedListener(MediaPlayer.OnPreparedListener{
+      onPrepared = function(mp)
+        mp.start()
+        currentChannelName = name
+        speak("Channel started playing: " .. name)
+        if playPauseBtn then
+          mainHandler.post(function()
+            playPauseBtn.setText("Stop Radio")
+          end)
+        end
+      end
+    })
+    
+    player.setOnErrorListener(MediaPlayer.OnErrorListener{
+      onError = function(mp, what, extra)
+        if not retried then
+          retried = true
+          pcall(function()
+            mp.reset()
+            mp.setAudioStreamType(AudioManager.STREAM_MUSIC)
+            mp.setDataSource(url)
+            mp.prepareAsync()
+          end)
+          return true
+        end
+
+        local errorMsg = "Channel failed to play"
+        if what == 1 then
+          errorMsg = "Channel failed to play: Network issue"
+        elseif what == 100 then
+          errorMsg = "Channel failed to play: Server not available"
+        else
+          errorMsg = "Channel failed to play: Error " .. tostring(what)
+        end
+        speak(errorMsg)
+        if playPauseBtn then
+          mainHandler.post(function()
+            playPauseBtn.setText("Play")
+          end)
+        end
+        return true
+      end
+    })
+  end)
+end
+
+function cancelSleepTimer()
+  if sleepTimerRunnable then
+    mainHandler.removeCallbacks(sleepTimerRunnable)
+    sleepTimerRunnable = nil
   end
 end
 
-function updateVolTts()
-  local max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-  local cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-  currentVolume = cur
-  local percent = math.floor((cur / max) * 100)
-  speak(percent .. " فیصد")
+function startSleepTimer(minutes)
+  cancelSleepTimer()
+  local ms = minutes * 60 * 1000
+  sleepTimerRunnable = function()
+    pcall(function()
+      if player and player.isPlaying() then
+        player.stop()
+      end
+    end)
+    speak("Sleep timer ended. Radio stopped.")
+    if currentPlayerDialog then
+      pcall(function() currentPlayerDialog.dismiss() end)
+      currentPlayerDialog = nil
+    end
+    sleepTimerRunnable = nil
+  end
+  mainHandler.postDelayed(sleepTimerRunnable, ms)
+  speak("Sleep timer set for " .. minutes .. " minutes")
 end
 
-function startStreaming(url, playPauseBtn, name)
-  player.reset()
-  player.setAudioStreamType(AudioManager.STREAM_MUSIC)
-  player.setDataSource(url)
-  player.prepareAsync()
-  player.setOnPreparedListener(MediaPlayer.OnPreparedListener{
-    onPrepared = function(mp) 
-      mp.start() 
-      if playPauseBtn then playPauseBtn.setText("Stop Radio") end 
-      speak("چینل پلے ہو گیا " .. (name and (": " .. name) or ""))
+function showSettings()
+  local layout = {LinearLayout, orientation="vertical", padding="20dp",
+    {TextView, text="Sleep Timer", textSize="18sp", gravity="center", layout_marginBottom="10dp"},
+    {EditText, id="edit_minutes", hint="Enter minutes (e.g. 10, 20, 30)", inputType="number"},
+    {Button, id="save_btn", text="Save"},
+    {Button, id="back_btn", text="Go Back"}
+  }
+  local dlg = LuaDialog(service)
+  dlg.setView(loadlayout(layout))
+  dlg.show()
+
+  save_btn.onClick = function()
+    local text = edit_minutes.getText().toString()
+    local minutes = tonumber(text)
+    if minutes and minutes > 0 then
+      startSleepTimer(minutes)
+      dlg.dismiss()
+      mainMenu()
+    else
+      speak("Please enter a valid number of minutes")
     end
-  })
-  player.setOnErrorListener(MediaPlayer.OnErrorListener{
-    onError = function(mp, what, extra)
-      local msg = "چینل چل نہیں سکا"
-      if what == 1 then msg = "نیٹ ورک کا مسئلہ ہے" end
-      speak(msg)
-      if playPauseBtn then playPauseBtn.setText("Play") end
-      return true
-    end
-  })
+  end
+  back_btn.onClick = function() dlg.dismiss() mainMenu() end
 end
 
 function showAddChannel(parentDlg)
   local layout = {LinearLayout, orientation="vertical", padding="20dp",
-    {EditText, id="edit_name", hint="نیم ایڈ کریں"},
-    {EditText, id="edit_url", hint="لنک ایڈ کریں"},
+    {EditText, id="edit_name", hint="Enter Channel Name"},
+    {EditText, id="edit_url", hint="Enter Channel URL"},
     {Button, id="save_btn", text="Save"},
     {Button, id="back_btn", text="Go Back"}
   }
@@ -231,12 +490,12 @@ function showAddChannel(parentDlg)
     if name ~= "" and url ~= "" then
       table.insert(favorites, {name=name, url=url, cat="Favourite"})
       saveFavorites(favorites)
-      speak("چینل محفوظ ہو گیا")
+      speak("Channel saved: " .. name)
       dlg.dismiss()
       if parentDlg then parentDlg.dismiss() end
       showList("Favourite")
     else
-      speak("براہ کرم نام اور لنک دونوں درج کریں")
+      speak("Please enter both name and URL")
     end
   end
   back_btn.onClick = function() dlg.dismiss() end
@@ -250,15 +509,21 @@ function showList(category)
   end
   
   local filtered = source
+  local headerText = category .. " - " .. #source .. " Channels"
+
   local layout = {LinearLayout, orientation="vertical", padding="15dp",
-    {TextView, text="FM Radio Channel - Creator: Mohammad Usman", textSize="16sp", gravity="center", layout_marginBottom="5dp"},
-    {LinearLayout, orientation="horizontal",
+    {TextView, text=headerText, textSize="16sp", gravity="center", layout_marginBottom="5dp"}
+  }
+
+  if category ~= "Favourite" then
+    table.insert(layout, {LinearLayout, orientation="horizontal",
       {EditText, id="search_box", hint="Search...", layout_weight="1"},
       {Button, id="search_btn", text="Search"}
-    },
-    {ListView, id="list", layout_width="fill", layout_height="0dp", layout_weight="1"},
-    {Button, id="back_btn", text="Go Back", layout_width="fill"}
-  }
+    })
+  end
+
+  table.insert(layout, {ListView, id="list", layout_width="fill", layout_height="0dp", layout_weight="1"})
+  table.insert(layout, {Button, id="back_btn", text="Go Back", layout_width="fill"})
   
   local dlg = LuaDialog(service)
   dlg.setView(loadlayout(layout))
@@ -274,11 +539,13 @@ function showList(category)
   refresh(filtered)
   list.setSelection(lastPosition)
   
-  search_btn.onClick = function()
-    local q = search_box.getText().toString():lower()
-    filtered = {}
-    for _, ch in ipairs(source) do if ch.name:lower():find(q) then table.insert(filtered, ch) end end
-    refresh(filtered)
+  if category ~= "Favourite" then
+    search_btn.onClick = function()
+      local q = search_box.getText().toString():lower()
+      filtered = {}
+      for _, ch in ipairs(source) do if ch.name:lower():find(q) then table.insert(filtered, ch) end end
+      refresh(filtered)
+    end
   end
   
   list.onItemClick = function(l,v,pos,id)
@@ -298,20 +565,19 @@ function openPlayer(list, pos, isFavList)
       {Button, id="next_btn", text="Next", layout_weight="1"},
       {Button, id="prev_btn", text="Previous", layout_weight="1"}
     },
-    {Button, id="vol_up", text="Volume Up", layout_width="fill"},
-    {Button, id="vol_down", text="Volume Down", layout_width="fill"},
     {Button, id="fav_btn", text=isFavList and "Remove from Favourite" or "Add to Favourite", layout_width="fill"},
     {Button, id="back_btn", text="Back", layout_width="fill"}
   }
   local dlg2 = LuaDialog(service)
   dlg2.setView(loadlayout(layout))
   dlg2.show()
+  currentPlayerDialog = dlg2
   
   play_pause_btn.onClick = function()
     if player.isPlaying() then 
       player.stop() 
       play_pause_btn.setText("Play") 
-      speak("چینل بند ہو گیا")
+      speak("Channel stopped")
     else 
       startStreaming(channel.url, play_pause_btn, channel.name) 
     end
@@ -322,6 +588,7 @@ function openPlayer(list, pos, isFavList)
       pos = pos + 1
       channel = list[pos]
       startStreaming(channel.url, play_pause_btn, channel.name)
+      speak("Next channel: " .. channel.name)
       dlg2.setTitle(channel.name)
     end
   end
@@ -331,41 +598,36 @@ function openPlayer(list, pos, isFavList)
       pos = pos - 1
       channel = list[pos]
       startStreaming(channel.url, play_pause_btn, channel.name)
+      speak("Previous channel: " .. channel.name)
       dlg2.setTitle(channel.name)
     end
-  end
-  
-  vol_up.onClick = function()
-    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-    updateVolTts()
-  end
-  
-  vol_down.onClick = function()
-    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
-    updateVolTts()
   end
   
   fav_btn.onClick = function()
     if isFavList then
       for i, ch in ipairs(favorites) do if ch.name == channel.name then table.remove(favorites, i) break end end
       saveFavorites(favorites) 
-      speak("فہرست سے ہٹا دیا")
+      speak("Removed from favourites: " .. channel.name)
       dlg2.dismiss() 
       showList("Favourite")
     else
       local exists = false
       for _, ch in ipairs(favorites) do if ch.name == channel.name then exists = true break end end
       if exists then 
-        speak("پہلے سے موجود ہے") 
+        speak("Already in favourites: " .. channel.name)
       else 
         table.insert(favorites, channel) 
         saveFavorites(favorites) 
-        speak("فہرست میں شامل کر دیا") 
+        speak("Added to favourites: " .. channel.name)
       end
     end
   end
   back_btn.onClick = function() 
-    if player.isPlaying() then player.stop() end
+    if player.isPlaying() then 
+      player.stop() 
+      speak("Channel stopped")
+    end
+    currentPlayerDialog = nil
     dlg2.dismiss() 
     showList(current_category) 
   end
@@ -383,7 +645,10 @@ function showAbout()
   dlgAbout.setView(loadlayout(layout))
   dlgAbout.show()
   wa_btn.onClick = function() service.getContext().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/"..whatsapp_number))) end
-  copy_btn.onClick = function() service.getContext().getSystemService(Context.CLIPBOARD_SERVICE).setPrimaryClip(ClipData.newPlainText("label", whatsapp_number)) speak("نمبر کاپی ہو گیا") end
+  copy_btn.onClick = function() 
+    service.getContext().getSystemService(Context.CLIPBOARD_SERVICE).setPrimaryClip(ClipData.newPlainText("label", whatsapp_number)) 
+    speak("Number copied")
+  end
   back_btn.onClick = function() dlgAbout.dismiss() mainMenu() end
 end
 
@@ -396,6 +661,7 @@ function mainMenu()
     {Button, id="eng", text="English"},
     {Button, id="spo", text="Sports"},
     {Button, id="add_ch", text="Add Channel"},
+    {Button, id="settings_btn", text="Settings"},
     {Button, id="abt", text="About & Support"},
     {Button, id="exit_btn", text="Go Back", layout_width="fill", layout_marginTop="10dp"}
   }
@@ -409,8 +675,15 @@ function mainMenu()
   eng.onClick = function() dlgMain.dismiss() showList("English") end
   spo.onClick = function() dlgMain.dismiss() showList("Sports") end
   add_ch.onClick = function() showAddChannel(dlgMain) end
+  settings_btn.onClick = function() dlgMain.dismiss() showSettings() end
   abt.onClick = function() dlgMain.dismiss() showAbout() end
-  exit_btn.onClick = function() if player then player.stop() player.release() end dlgMain.dismiss() end
+  exit_btn.onClick = function() 
+    if player then 
+      player.stop() 
+      player.release() 
+    end 
+    dlgMain.dismiss() 
+  end
 end
 
 mainMenu()
