@@ -3,7 +3,7 @@ import "android.media.MediaPlayer"
 import "android.media.AudioManager"
 import "android.widget.*"
 import "android.view.*"
-import "android.content.Context" 
+import "android.content.Context"
 import "java.util.HashMap"
 import "android.net.Uri"
 import "android.content.Intent"
@@ -15,6 +15,7 @@ import "android.os.Handler"
 import "android.os.Looper"
 import "android.speech.tts.TextToSpeech"
 import "java.util.Locale"
+import "java.util.Calendar"
 
 -- =============================================
 -- Extension Name: FM Radio Channel
@@ -25,7 +26,7 @@ if player then pcall(function() player.stop() player.release() end) end
 player = MediaPlayer()
 
 lastPosition = 0
-current_category = "" 
+current_category = ""
 whatsapp_number = "923261421100"
 currentChannelName = ""
 
@@ -33,7 +34,11 @@ currentChannelName = ""
 sleepTimerRunnable = nil
 currentPlayerDialog = nil
 
+-- Reminder globals
+reminderRunnables = {}
+
 local prefs = service.getContext().getSharedPreferences("fm_favorites", Context.MODE_PRIVATE)
+local reminderPrefs = service.getContext().getSharedPreferences("fm_reminders", Context.MODE_PRIVATE)
 local audioManager = service.getContext().getSystemService(Context.AUDIO_SERVICE)
 local mainHandler = Handler(Looper.getMainLooper())
 
@@ -60,10 +65,8 @@ function initTTS()
   })
 end
 
--- Call init
 initTTS()
 
--- TTS Function
 function speak(text)
   if tts and ttsReady then
     pcall(function()
@@ -98,7 +101,7 @@ end
 favorites = loadFavorites()
 
 all_channels = {
-  -- Radio Pakistan (PBC) Stations
+  -- Pakistan Channels (87)
   {name="Saut-ul-Quran", url="https://whmsonic.radio.gov.pk:7002/stream?type=http&nocache=12", cat="Pakistan"},
   {name="FM 101 Islamabad", url="https://whmsonic.radio.gov.pk:7008/stream?type=http&nocache=12", cat="Pakistan"},
   {name="Planet FM 87.6", url="https://whmsonic.radio.gov.pk:7042/stream?type=http&nocache=12", cat="Pakistan"},
@@ -151,8 +154,6 @@ all_channels = {
   {name="FM 93 Gilgit", url="https://whmsonic.radio.gov.pk:8090/relay?type=http&nocache=9", cat="Pakistan"},
   {name="MW 1557 Skardu", url="https://whmsonic.radio.gov.pk:8080/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM93 Skardu", url="https://whmsonic.radio.gov.pk:8104/relay?type=http&nocache=9", cat="Pakistan"},
-
-  -- Other Pakistan Channels
   {name="Shalimar FM 94.6", url="http://s3.voscast.com:8534/;stream.mp3", cat="Pakistan"},
   {name="Radio Jeevay Pakistan FM Network", url="https://s7.reliastream.com/proxy/tahash07?mp=/stream", cat="Pakistan"},
   {name="FM 100 Lahore", url="https://cast4.servcast.net/proxy/fm100lhr/stream", cat="Pakistan"},
@@ -183,15 +184,12 @@ all_channels = {
   {name="Buzz FM", url="http://fusion.shoutca.st:8112/stream", cat="Pakistan"},
   {name="Quran Radio Makkah", url="https://stream.radiojar.com/8s5u5tpdtwzuv", cat="Pakistan"},
   {name="Quran Radio Madinah", url="https://stream.radiojar.com/0tpy1h0kxtzuv", cat="Pakistan"},
-  {name="Radio Pak Filmi", url="https://stream.zeno.fm/0r0xa792kwzuv", cat="Pakistan"},
   {name="Pak 100", url="https://stream.zeno.fm/4bav1shcna0uv", cat="Pakistan"},
   {name="Radio FM World Pakistan", url="https://stream.zeno.fm/tty4gmu30ehvv", cat="Pakistan"},
   {name="All 4Masti", url="https://stream.zeno.fm/31huk9y8u68uv", cat="Pakistan"},
   {name="All 4Masti Sargodha", url="https://stream.zeno.fm/bahhkuge5zhvv", cat="Pakistan"},
   {name="Hot FM 105 Quetta", url="http://cc.vmakerhost.com:8066/;", cat="Pakistan"},
-
-  -- India Channels
-  {name="AIR Live 1", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", cat="India"},
+  -- India Channels (155)
   {name="Vividh Bharati", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio012/playlist.m3u8", cat="India"},
   {name="FM Gold Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio214/playlist.m3u8", cat="India"},
   {name="FM Rainbow Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio216/playlist.m3u8", cat="India"},
@@ -347,8 +345,7 @@ all_channels = {
   {name="AIR Tezpur (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio243/playlist.m3u8", cat="India"},
   {name="AIR Nagaon (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio244/playlist.m3u8", cat="India"},
   {name="AIR Barpeta (Assam)", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio245/playlist.m3u8", cat="India"},
-
-  -- English Channels
+  -- English Channels (11)
   {name="BBC World Service", url="http://stream.live.vc.bbcmedia.co.uk/bbc_world_service", cat="English"},
   {name="BBC Arabic", url="http://stream.live.vc.bbcmedia.co.uk/bbc_arabic_radio", cat="English"},
   {name="VOA Urdu", url="https://voa-28.akacast.akamaistream.net/7/368/437800/v1/ibb.akacast.akamaistream.net/voa-urdu", cat="English"},
@@ -358,13 +355,12 @@ all_channels = {
   {name="Swiss Classic Radio", url="http://stream.srg-ssr.ch/m/rsc_de/mp3_128", cat="English"},
   {name="Swiss Pop Radio", url="http://stream.srg-ssr.ch/m/rsp/mp3_128", cat="English"},
   {name="Swiss Jazz Radio", url="http://stream.srg-ssr.ch/m/rsj/mp3_128", cat="English"},
-  {name="RTÉ Radio 1 News Ireland", url="http://icecast2.rte.ie/radio1", cat="English"},
+  {name="RTE Radio 1 News Ireland", url="http://icecast2.rte.ie/radio1", cat="English"},
   {name="Newstalk Ireland", url="https://stream.audioxi.com/NT", cat="English"},
-
-  -- Sports Channels
-  {name="TalkSPORT UK", url="https://radio.talksport.com/stream", cat="Sports"},
+  -- Sports Channels (3)
+  {name="Cricket Fever Radio", url="https://stream.zeno.fm/0r0xa792kwzuv", cat="Sports"},
   {name="All India Radio Sports", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8", cat="Sports"},
-  {name="Cricket Fever Radio", url="http://stream.zeno.fm/0r0xa792kwzuv", cat="Sports"}
+  {name="TalkSPORT UK", url="https://radio.talksport.com/stream", cat="Sports"},
 }
 
 function startStreaming(url, playPauseBtn, name)
@@ -388,7 +384,7 @@ function startStreaming(url, playPauseBtn, name)
         end
       end
     })
-    
+
     player.setOnErrorListener(MediaPlayer.OnErrorListener{
       onError = function(mp, what, extra)
         if not retried then
@@ -422,6 +418,31 @@ function startStreaming(url, playPauseBtn, name)
   end)
 end
 
+-- ================= Volume Control =================
+function getVolumePercent()
+  local max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+  local cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+  if max == 0 then return 0 end
+  return math.floor((cur / max) * 100 + 0.5)
+end
+
+function volumeUp()
+  pcall(function()
+    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+  end)
+  local pct = getVolumePercent()
+  speak("Volume " .. pct .. " percent badh gaya hai")
+end
+
+function volumeDown()
+  pcall(function()
+    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+  end)
+  local pct = getVolumePercent()
+  speak("Volume " .. pct .. " percent kam ho gaya hai")
+end
+
+-- ================= Sleep Timer =================
 function cancelSleepTimer()
   if sleepTimerRunnable then
     mainHandler.removeCallbacks(sleepTimerRunnable)
@@ -449,11 +470,214 @@ function startSleepTimer(minutes)
   speak("Sleep timer set for " .. minutes .. " minutes")
 end
 
+-- ================= Channel Reminder (Alarm) =================
+local monthNames = {
+  january=0, february=1, march=2, april=3, may=4, june=5,
+  july=6, august=7, september=8, october=9, november=10, december=11
+}
+
+function loadReminders()
+  local json = reminderPrefs.getString("rem_list", "[]")
+  local list = {}
+  local arr = JSONArray(json)
+  for i=0, arr.length()-1 do
+    local obj = arr.getJSONObject(i)
+    table.insert(list, {
+      id = obj.getString("id"),
+      channel = obj.getString("channel"),
+      dateStr = obj.getString("dateStr"),
+      hour = obj.getInt("hour"),
+      minute = obj.getInt("minute"),
+      ampm = obj.getString("ampm"),
+      timestamp = obj.getDouble("timestamp")
+    })
+  end
+  return list
+end
+
+function saveReminders(list)
+  local arr = JSONArray()
+  for _, r in ipairs(list) do
+    local obj = JSONObject()
+    obj.put("id", r.id)
+    obj.put("channel", r.channel)
+    obj.put("dateStr", r.dateStr)
+    obj.put("hour", r.hour)
+    obj.put("minute", r.minute)
+    obj.put("ampm", r.ampm)
+    obj.put("timestamp", r.timestamp)
+    arr.put(obj)
+  end
+  reminderPrefs.edit().putString("rem_list", arr.toString()).commit()
+end
+
+reminders = loadReminders()
+
+function cancelReminderRunnable(id)
+  if reminderRunnables[id] then
+    mainHandler.removeCallbacks(reminderRunnables[id])
+    reminderRunnables[id] = nil
+  end
+end
+
+function scheduleReminder(r)
+  local now = Calendar.getInstance().getTimeInMillis()
+  local delay = r.timestamp - now
+  if delay <= 0 then return end
+  local runnable = function()
+    speak("Reminder: " .. r.channel .. " ka time ho gaya hai. Aapka program " .. r.dateStr .. " ko " .. r.hour .. ":" .. string.format("%02d", r.minute) .. " " .. r.ampm .. " par set kiya gaya tha, ab suna sakte hain.")
+    reminderRunnables[r.id] = nil
+  end
+  reminderRunnables[r.id] = runnable
+  mainHandler.postDelayed(runnable, delay)
+end
+
+-- schedule all pending (future) reminders on load
+for _, r in ipairs(reminders) do
+  scheduleReminder(r)
+end
+
+function showAddReminder()
+  local layout = {LinearLayout, orientation="vertical", padding="20dp",
+    {TextView, text="Naya Channel Reminder", textSize="18sp", gravity="center", layout_marginBottom="10dp"},
+    {EditText, id="edit_channel", hint="Channel Name"},
+    {EditText, id="edit_date", hint="Date (e.g. 15 January 2026)"},
+    {LinearLayout, orientation="horizontal",
+      {EditText, id="edit_hour", hint="Hour (1-12)", inputType="number", layout_weight="1"},
+      {EditText, id="edit_minute", hint="Minute (0-59)", inputType="number", layout_weight="1"},
+      {EditText, id="edit_ampm", hint="AM / PM", layout_weight="1"}
+    },
+    {Button, id="save_btn", text="Save Reminder"},
+    {Button, id="back_btn", text="Go Back"}
+  }
+  local dlg = LuaDialog(service)
+  dlg.setView(loadlayout(layout))
+  dlg.show()
+
+  save_btn.onClick = function()
+    local channel = edit_channel.getText().toString()
+    local dateStr = edit_date.getText().toString()
+    local hourText = edit_hour.getText().toString()
+    local minuteText = edit_minute.getText().toString()
+    local ampm = edit_ampm.getText().toString():upper()
+
+    if channel == "" or dateStr == "" or hourText == "" or minuteText == "" or (ampm ~= "AM" and ampm ~= "PM") then
+      speak("Please fill all fields correctly. AM ya PM likhna zaroori hai")
+      return
+    end
+
+    local hour = tonumber(hourText)
+    local minute = tonumber(minuteText)
+    if not hour or not minute or hour < 1 or hour > 12 or minute < 0 or minute > 59 then
+      speak("Hour ya Minute sahi nahi hai")
+      return
+    end
+
+    local day, monthName, year = dateStr:match("(%d+)%s+(%a+)%s+(%d+)")
+    if not day then
+      speak("Date ka format sahi nahi hai, jaise 15 January 2026")
+      return
+    end
+    local monthIndex = monthNames[monthName:lower()]
+    if not monthIndex then
+      speak("Month ka naam sahi nahi hai")
+      return
+    end
+
+    local hour24 = hour
+    if ampm == "PM" and hour < 12 then hour24 = hour + 12 end
+    if ampm == "AM" and hour == 12 then hour24 = 0 end
+
+    local cal = Calendar.getInstance()
+    cal.set(Calendar.YEAR, tonumber(year))
+    cal.set(Calendar.MONTH, monthIndex)
+    cal.set(Calendar.DAY_OF_MONTH, tonumber(day))
+    cal.set(Calendar.HOUR_OF_DAY, hour24)
+    cal.set(Calendar.MINUTE, minute)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    local targetMillis = cal.getTimeInMillis()
+
+    if targetMillis <= Calendar.getInstance().getTimeInMillis() then
+      speak("Yeh time guzar chuka hai, sahi date aur time dalein")
+      return
+    end
+
+    local id = tostring(targetMillis) .. "_" .. tostring(#reminders + 1)
+    local r = {id=id, channel=channel, dateStr=dateStr, hour=hour, minute=minute, ampm=ampm, timestamp=targetMillis}
+    table.insert(reminders, r)
+    saveReminders(reminders)
+    scheduleReminder(r)
+    speak("Reminder save ho gaya hai: " .. channel .. " " .. dateStr .. " " .. hour .. ":" .. string.format("%02d", minute) .. " " .. ampm)
+    dlg.dismiss()
+    showReminderMenu()
+  end
+
+  back_btn.onClick = function() dlg.dismiss() showReminderMenu() end
+end
+
+function showReminderList()
+  local layout = {LinearLayout, orientation="vertical", padding="15dp",
+    {TextView, text="Saved Reminders (" .. #reminders .. ")", textSize="16sp", gravity="center", layout_marginBottom="5dp"},
+    {ListView, id="list", layout_width="fill", layout_height="0dp", layout_weight="1"},
+    {Button, id="delete_btn", text="Delete Selected", layout_width="fill"},
+    {Button, id="back_btn", text="Go Back", layout_width="fill"}
+  }
+  local dlg = LuaDialog(service)
+  dlg.setView(loadlayout(layout))
+  dlg.show()
+
+  local adapter = ArrayAdapter(service, android.R.layout.simple_list_item_multiple_choice, {})
+  list.setAdapter(adapter)
+  list.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE)
+
+  for _, r in ipairs(reminders) do
+    adapter.add(r.channel .. " | " .. r.dateStr .. " | " .. r.hour .. ":" .. string.format("%02d", r.minute) .. " " .. r.ampm)
+  end
+
+  delete_btn.onClick = function()
+    local newList = {}
+    for i, r in ipairs(reminders) do
+      local checked = list.isItemChecked(i - 1)
+      if checked then
+        cancelReminderRunnable(r.id)
+      else
+        table.insert(newList, r)
+      end
+    end
+    reminders = newList
+    saveReminders(reminders)
+    speak("Selected reminders delete ho gaye hain")
+    dlg.dismiss()
+    showReminderList()
+  end
+
+  back_btn.onClick = function() dlg.dismiss() showReminderMenu() end
+end
+
+function showReminderMenu()
+  local layout = {LinearLayout, orientation="vertical", padding="20dp",
+    {TextView, text="Channel Reminder", textSize="18sp", gravity="center", layout_marginBottom="10dp"},
+    {Button, id="add_rem_btn", text="Add New Reminder"},
+    {Button, id="view_rem_btn", text="View / Delete Reminders"},
+    {Button, id="back_btn", text="Go Back"}
+  }
+  local dlg = LuaDialog(service)
+  dlg.setView(loadlayout(layout))
+  dlg.show()
+
+  add_rem_btn.onClick = function() dlg.dismiss() showAddReminder() end
+  view_rem_btn.onClick = function() dlg.dismiss() showReminderList() end
+  back_btn.onClick = function() dlg.dismiss() showSettings() end
+end
+
 function showSettings()
   local layout = {LinearLayout, orientation="vertical", padding="20dp",
-    {TextView, text="Sleep Timer", textSize="18sp", gravity="center", layout_marginBottom="10dp"},
+    {TextView, text="Settings", textSize="18sp", gravity="center", layout_marginBottom="10dp"},
+    {TextView, text="Sleep Timer", textSize="16sp", layout_marginBottom="5dp"},
     {EditText, id="edit_minutes", hint="Enter minutes (e.g. 10, 20, 30)", inputType="number"},
-    {Button, id="save_btn", text="Save"},
+    {Button, id="save_btn", text="Set Sleep Timer"},
+    {Button, id="reminder_btn", text="Channel Reminder"},
     {Button, id="back_btn", text="Go Back"}
   }
   local dlg = LuaDialog(service)
@@ -471,6 +695,7 @@ function showSettings()
       speak("Please enter a valid number of minutes")
     end
   end
+  reminder_btn.onClick = function() dlg.dismiss() showReminderMenu() end
   back_btn.onClick = function() dlg.dismiss() mainMenu() end
 end
 
@@ -507,7 +732,7 @@ function showList(category)
   if category ~= "Favourite" then
     for _, ch in ipairs(all_channels) do if ch.cat == category then table.insert(source, ch) end end
   end
-  
+
   local filtered = source
   local headerText = category .. " - " .. #source .. " Channels"
 
@@ -524,21 +749,21 @@ function showList(category)
 
   table.insert(layout, {ListView, id="list", layout_width="fill", layout_height="0dp", layout_weight="1"})
   table.insert(layout, {Button, id="back_btn", text="Go Back", layout_width="fill"})
-  
+
   local dlg = LuaDialog(service)
   dlg.setView(loadlayout(layout))
   dlg.show()
-  
+
   local adapter = ArrayAdapter(service, android.R.layout.simple_list_item_1, {})
   list.setAdapter(adapter)
-  
+
   local function refresh(data)
     adapter.clear()
     for _, ch in ipairs(data) do adapter.add(ch.name) end
   end
   refresh(filtered)
   list.setSelection(lastPosition)
-  
+
   if category ~= "Favourite" then
     search_btn.onClick = function()
       local q = search_box.getText().toString():lower()
@@ -547,7 +772,7 @@ function showList(category)
       refresh(filtered)
     end
   end
-  
+
   list.onItemClick = function(l,v,pos,id)
     lastPosition = pos
     dlg.dismiss()
@@ -565,6 +790,10 @@ function openPlayer(list, pos, isFavList)
       {Button, id="next_btn", text="Next", layout_weight="1"},
       {Button, id="prev_btn", text="Previous", layout_weight="1"}
     },
+    {LinearLayout, orientation="horizontal", layout_width="fill",
+      {Button, id="vol_down_btn", text="Volume -", layout_weight="1"},
+      {Button, id="vol_up_btn", text="Volume +", layout_weight="1"}
+    },
     {Button, id="fav_btn", text=isFavList and "Remove from Favourite" or "Add to Favourite", layout_width="fill"},
     {Button, id="back_btn", text="Back", layout_width="fill"}
   }
@@ -572,17 +801,17 @@ function openPlayer(list, pos, isFavList)
   dlg2.setView(loadlayout(layout))
   dlg2.show()
   currentPlayerDialog = dlg2
-  
+
   play_pause_btn.onClick = function()
-    if player.isPlaying() then 
-      player.stop() 
-      play_pause_btn.setText("Play") 
+    if player.isPlaying() then
+      player.stop()
+      play_pause_btn.setText("Play")
       speak("Channel stopped")
-    else 
-      startStreaming(channel.url, play_pause_btn, channel.name) 
+    else
+      startStreaming(channel.url, play_pause_btn, channel.name)
     end
   end
-  
+
   next_btn.onClick = function()
     if pos < #list then
       pos = pos + 1
@@ -592,7 +821,7 @@ function openPlayer(list, pos, isFavList)
       dlg2.setTitle(channel.name)
     end
   end
-  
+
   prev_btn.onClick = function()
     if pos > 1 then
       pos = pos - 1
@@ -602,34 +831,37 @@ function openPlayer(list, pos, isFavList)
       dlg2.setTitle(channel.name)
     end
   end
-  
+
+  vol_up_btn.onClick = function() volumeUp() end
+  vol_down_btn.onClick = function() volumeDown() end
+
   fav_btn.onClick = function()
     if isFavList then
       for i, ch in ipairs(favorites) do if ch.name == channel.name then table.remove(favorites, i) break end end
-      saveFavorites(favorites) 
+      saveFavorites(favorites)
       speak("Removed from favourites: " .. channel.name)
-      dlg2.dismiss() 
+      dlg2.dismiss()
       showList("Favourite")
     else
       local exists = false
       for _, ch in ipairs(favorites) do if ch.name == channel.name then exists = true break end end
-      if exists then 
+      if exists then
         speak("Already in favourites: " .. channel.name)
-      else 
-        table.insert(favorites, channel) 
-        saveFavorites(favorites) 
+      else
+        table.insert(favorites, channel)
+        saveFavorites(favorites)
         speak("Added to favourites: " .. channel.name)
       end
     end
   end
-  back_btn.onClick = function() 
-    if player.isPlaying() then 
-      player.stop() 
+  back_btn.onClick = function()
+    if player.isPlaying() then
+      player.stop()
       speak("Channel stopped")
     end
     currentPlayerDialog = nil
-    dlg2.dismiss() 
-    showList(current_category) 
+    dlg2.dismiss()
+    showList(current_category)
   end
 end
 
@@ -645,8 +877,8 @@ function showAbout()
   dlgAbout.setView(loadlayout(layout))
   dlgAbout.show()
   wa_btn.onClick = function() service.getContext().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/"..whatsapp_number))) end
-  copy_btn.onClick = function() 
-    service.getContext().getSystemService(Context.CLIPBOARD_SERVICE).setPrimaryClip(ClipData.newPlainText("label", whatsapp_number)) 
+  copy_btn.onClick = function()
+    service.getContext().getSystemService(Context.CLIPBOARD_SERVICE).setPrimaryClip(ClipData.newPlainText("label", whatsapp_number))
     speak("Number copied")
   end
   back_btn.onClick = function() dlgAbout.dismiss() mainMenu() end
@@ -668,7 +900,7 @@ function mainMenu()
   local dlgMain = LuaDialog(service)
   dlgMain.setView(loadlayout(layout))
   dlgMain.show()
-  
+
   fav.onClick = function() dlgMain.dismiss() showList("Favourite") end
   pak.onClick = function() dlgMain.dismiss() showList("Pakistan") end
   ind.onClick = function() dlgMain.dismiss() showList("India") end
@@ -677,12 +909,12 @@ function mainMenu()
   add_ch.onClick = function() showAddChannel(dlgMain) end
   settings_btn.onClick = function() dlgMain.dismiss() showSettings() end
   abt.onClick = function() dlgMain.dismiss() showAbout() end
-  exit_btn.onClick = function() 
-    if player then 
-      player.stop() 
-      player.release() 
-    end 
-    dlgMain.dismiss() 
+  exit_btn.onClick = function()
+    if player then
+      player.stop()
+      player.release()
+    end
+    dlgMain.dismiss()
   end
 end
 
