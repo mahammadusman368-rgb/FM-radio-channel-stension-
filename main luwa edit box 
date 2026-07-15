@@ -47,18 +47,13 @@ local tts = nil
 local ttsReady = false
 
 function initTTS()
+  -- Phone mein jo TTS engine/language pehle se select hai (Settings > Text-to-Speech),
+  -- usi ko use karega. Koi bhi Locale ya engine force nahin kiya ja raha,
+  -- taake Google ka TTS zabardasti na chale, balke user ka apna selected
+  -- English/USA TTS hi bolega.
   tts = TextToSpeech(service, TextToSpeech.OnInitListener{
     onInit = function(status)
       if status == TextToSpeech.SUCCESS then
-        pcall(function()
-          local result = tts.setLanguage(Locale.US)
-          if result == TextToSpeech.LANG_MISSING_DATA or result == TextToSpeech.LANG_NOT_SUPPORTED then
-            result = tts.setLanguage(Locale.ENGLISH)
-          end
-          if result == TextToSpeech.LANG_MISSING_DATA or result == TextToSpeech.LANG_NOT_SUPPORTED then
-            result = tts.setLanguage(Locale.UK)
-          end
-        end)
         ttsReady = true
       end
     end
@@ -101,7 +96,7 @@ end
 favorites = loadFavorites()
 
 all_channels = {
-  -- Pakistan Channels (87)
+  -- Pakistan Channels (109)
   {name="Saut-ul-Quran", url="https://whmsonic.radio.gov.pk:7002/stream?type=http&nocache=12", cat="Pakistan"},
   {name="FM 101 Islamabad", url="https://whmsonic.radio.gov.pk:7008/stream?type=http&nocache=12", cat="Pakistan"},
   {name="Planet FM 87.6", url="https://whmsonic.radio.gov.pk:7042/stream?type=http&nocache=12", cat="Pakistan"},
@@ -110,10 +105,6 @@ all_channels = {
   {name="World Service", url="https://whmsonic.radio.gov.pk:7005/stream?type=http&nocache=12", cat="Pakistan"},
   {name="External Service", url="https://whmsonic.radio.gov.pk:7006/stream?type=http&nocache=12", cat="Pakistan"},
   {name="Sports & Health Channel", url="https://whmsonic.radio.gov.pk:7007/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Technology Channel", url="https://whmsonic.radio.gov.pk:8094/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Environment", url="https://whmsonic.radio.gov.pk:8102/stream?type=http&nocache=12", cat="Pakistan"},
-  {name="Health", url="https://whmsonic.radio.gov.pk:7000/Health", cat="Pakistan"},
-  {name="Kids", url="https://whmsonic.radio.gov.pk:7000/Kids", cat="Pakistan"},
   {name="FM 101 Bahawalpur", url="https://whmsonic.radio.gov.pk:8020/relay?type=http&nocache=9", cat="Pakistan"},
   {name="MW Bahawalpur", url="https://whmsonic.radio.gov.pk:8092/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 93 Faisalabad", url="https://whmsonic.radio.gov.pk:8022/relay?type=http&nocache=9", cat="Pakistan"},
@@ -147,7 +138,6 @@ all_channels = {
   {name="FM 93 Chitral", url="https://whmsonic.radio.gov.pk:8066/relay?type=http&nocache=9", cat="Pakistan"},
   {name="D.I. Khan MW 711", url="https://whmsonic.radio.gov.pk:7000/Dikhan?type=http&nocache=9", cat="Pakistan"},
   {name="FM 101 Mirpur", url="https://whmsonic.radio.gov.pk:8078/relay?type=http&nocache=9", cat="Pakistan"},
-  {name="AK-RADIO-Tarakhel", url="https://whmsonic.radio.gov.pk:8076/relay?type=http&nocache=9", cat="Pakistan"},
   {name="FM 93 Muzaffarabad", url="https://whmsonic.radio.gov.pk:7000/93muzaffarabad?type=http&nocache=9", cat="Pakistan"},
   {name="Azad Kashmir Radio Mirpur", url="https://whmsonic.radio.gov.pk:8074/relay?type=http&nocache=9", cat="Pakistan"},
   {name="Gilgit MW 1512Khz", url="https://whmsonic.radio.gov.pk:8082/relay?type=http&nocache=9", cat="Pakistan"},
@@ -163,7 +153,6 @@ all_channels = {
   {name="Suno FM Pashto", url="https://stream.sunofmradio.com:8443/PSCRECORD", cat="Pakistan"},
   {name="Suno FM Balochi", url="https://stream.sunofmradio.com:8443/QUETARECORD", cat="Pakistan"},
   {name="Suno FM Balti", url="https://stream.sunofmradio.com:8443/GILGITRECORD", cat="Pakistan"},
-  {name="Suno FM Shina", url="https://stream.sunofmradio.com:8443/GBRECORD", cat="Pakistan"},
   {name="Suno FM Saraiki", url="https://stream.sunofmradio.com:8443/MultanStudio", cat="Pakistan"},
   {name="Suno FM Kashmiri", url="https://stream.sunofmradio.com:8443/KASHMIRRECORD", cat="Pakistan"},
   {name="Suno FM Sindhi", url="https://stream.sunofmradio.com:8443/KCIRECORD", cat="Pakistan"},
@@ -189,6 +178,34 @@ all_channels = {
   {name="All 4Masti", url="https://stream.zeno.fm/31huk9y8u68uv", cat="Pakistan"},
   {name="All 4Masti Sargodha", url="https://stream.zeno.fm/bahhkuge5zhvv", cat="Pakistan"},
   {name="Hot FM 105 Quetta", url="http://cc.vmakerhost.com:8066/;", cat="Pakistan"},
+  {name="JEAY Matiari FM 91.6", url="https://cc.vmakerhost.com/proxy/jeayfm?mp=/matiari", cat="Pakistan"},
+  {name="JEAY Sukkur FM 88", url="https://ssl.rockhost.com/proxy/sukkur?mp=/stream", cat="Pakistan"},
+  {name="JEAY Larkana FM 88", url="https://ssl.rockhost.com/proxy/larkana?mp=/stream", cat="Pakistan"},
+  {name="JEAY Mirpurkhas FM 88", url="https://ssl.rockhost.com/proxy/mirpurkhas?mp=/stream", cat="Pakistan"},
+  {name="JEAY Moro-Naushero FM 88", url="https://ssl.rockhost.com/proxy/moro?mp=/stream", cat="Pakistan"},
+  {name="JEAY Mehrabpur FM 94", url="https://cc.vmakerhost.com/proxy/jeayfm?mp=/mehrabpurfm94", cat="Pakistan"},
+  {name="JEAY Sakrand Nawabshah FM 90.8", url="https://cc.vmakerhost.com/proxy/jeayfm2?mp=/sakrand", cat="Pakistan"},
+  {name="JEAY Matli FM 90.4", url="https://cc.vmakerhost.com/proxy/jeayfm2?mp=/matli", cat="Pakistan"},
+  {name="Radio Awaz Karachi FM 99", url="https://karachifm99-awazradionetwork.radioca.st/stream?type=http&nocache=15.mp3", cat="Pakistan"},
+  {name="Radio Awaz Lahore FM 99.4", url="https://lahorefm994-awazradionetwork.radioca.st/stream?type=http&nocache=15.mp3", cat="Pakistan"},
+  {name="Radio Awaz Hyderabad FM 99.4", url="https://jamshorofm994-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Attock FM 107", url="https://attockfm107-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Gujranwala FM 106", url="https://gujranwalafm106-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Gujrat FM 105", url="https://gujratfm105-awazradionetwork.radioca.st/stream?type=http&nocache=15.mp3", cat="Pakistan"},
+  {name="Radio Awaz Sheikhupura FM 107", url="https://skpfm107-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Bhalwal FM 104", url="https://bwpfm104-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Jhang FM 105", url="https://jhangfm105-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Okara FM 105", url="https://okarafm1054-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Rajanpur FM 104", url="https://rajanpurfm104-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Bahawalpur FM 105", url="https://bwpfm105-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Khanpur FM 106", url="https://khanpurfm106-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Pakpattan FM 107", url="https://pakpatanfm107-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Sahiwal FM 105", url="https://sahiwalfm105-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="Radio Awaz Sadiqabad FM 105", url="https://sdkfm105-awazradionetwork.radioca.st/stream?type=http&nocache=15", cat="Pakistan"},
+  {name="City FM 89 Pakistan", url="https://radio.cityfm89.com/stream", cat="Pakistan"},
+  {name="Mast FM 103 Lahore", url="http://110.36.229.158:8000/", cat="Pakistan"},
+  {name="Quran Radio Abdul Basit", url="https://radio.mp3islam.com/listen/abdulbasit/radio.mp3", cat="Pakistan"},
+  {name="Radio One FM 91", url="https://cc.vmakerhost.com/proxy/karachi?mp=/stream", cat="Pakistan"},
   -- India Channels (155)
   {name="Vividh Bharati", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio012/playlist.m3u8", cat="India"},
   {name="FM Gold Delhi", url="http://air.pc.cdn.bitgravity.com/air/live/pbaudio214/playlist.m3u8", cat="India"},
@@ -791,8 +808,8 @@ function openPlayer(list, pos, isFavList)
       {Button, id="prev_btn", text="Previous", layout_weight="1"}
     },
     {LinearLayout, orientation="horizontal", layout_width="fill",
-      {Button, id="vol_down_btn", text="Volume -", layout_weight="1"},
-      {Button, id="vol_up_btn", text="Volume +", layout_weight="1"}
+      {Button, id="vol_up_btn", text="Volume +", layout_weight="1"},
+      {Button, id="vol_down_btn", text="Volume -", layout_weight="1"}
     },
     {Button, id="fav_btn", text=isFavList and "Remove from Favourite" or "Add to Favourite", layout_width="fill"},
     {Button, id="back_btn", text="Back", layout_width="fill"}
