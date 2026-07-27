@@ -153,7 +153,7 @@ end
 local function serializeFav(list)
     local parts = {}
     for i, ch in ipairs(list) do
-        parts[i] = ch.name .. "||" .. ch.url .. "||" .. (ch.category or "Custom")
+        parts[i] = ch.name .. "||" .. ch.url .. "||" .. (ch.category or "Other")
     end
     return table.concat(parts, "::")
 end
@@ -178,7 +178,7 @@ local function loadFavourites()
                 else
                     name = string.sub(piece, 1, sep - 1)
                     url = string.sub(piece, sep + 2)
-                    category = "Custom"
+                    category = "Other"
                 end
                 table.insert(list, { name = name, url = url, category = category })
             end
@@ -200,7 +200,7 @@ end
 local function addFavourite(name, url, category)
     if not isFavourite(url) then
         local list = loadFavourites()
-        table.insert(list, { name = name, url = url, category = category or "Custom" })
+        table.insert(list, { name = name, url = url, category = category or "Other" })
         saveFavourites(list)
         speak(name .. " favourite mein add kar diya gaya hai")
     else
@@ -312,8 +312,6 @@ end
 local currentVideoView = nil
 local currentName = nil
 local currentUrl = nil
-local errorCheckHandler = nil
-local errorCheckRunnable = nil
 
 local function videoErrorMessage(name, extra)
     if extra == -1004 then return name .. " play nahin ho saka, link ghalat hai ya connection fail hui"
@@ -323,16 +321,12 @@ local function videoErrorMessage(name, extra)
     else return name .. " play nahin ho saka, wajah maloom nahin ho saki" end
 end
 
-local function playInVideoView(videoView, name, url, onStartCallback, listRef, currentIndexRef, updateUiFunc, nextBtnRef)
+local function playInVideoView(videoView, name, url, onStartCallback)
     currentName = name
     currentUrl = url
     incrementChannelViewCount(url)
     
     speak(name .. " play ho gaya hai")
-
-    if errorCheckHandler and errorCheckRunnable then
-        errorCheckHandler.removeCallbacks(errorCheckRunnable)
-    end
 
     local videoMode = prefGet("video_display_mode", "ON")
     if videoView then
@@ -366,29 +360,6 @@ local function playInVideoView(videoView, name, url, onStartCallback, listRef, c
         videoView.start()
     end)
 
-    if listRef and currentIndexRef and updateUiFunc and nextBtnRef then
-        errorCheckHandler = Handler(Looper.getMainLooper())
-        errorCheckRunnable = Runnable{
-            run = function()
-                pcall(function()
-                    if currentVideoView and not currentVideoView.isPlaying() then
-                        speak("Pichla channel offline tha, agla channel play kiya ja raha hai")
-                        mainHandler.postDelayed(Runnable{
-                            run = function()
-                                local nextIdx = (currentIndexRef() % #listRef) + 1
-                                updateUiFunc(nextIdx)
-                                playInVideoView(currentVideoView, listRef[nextIdx].name, listRef[nextIdx].url, function(success)
-                                    if success and nextBtnRef then nextBtnRef.setText("Pause") end
-                                end, listRef, currentIndexRef, updateUiFunc, nextBtnRef)
-                            end
-                        }, 2000)
-                    end
-                end)
-            end
-        }
-        errorCheckHandler.postDelayed(errorCheckRunnable, 6000)
-    end
-
     if not ok then 
         speak(name .. " play nahin ho saka, link sahi format mein nahin hai") 
         if onStartCallback then onStartCallback(false) end
@@ -396,9 +367,6 @@ local function playInVideoView(videoView, name, url, onStartCallback, listRef, c
 end
 
 local function stopVideo()
-    if errorCheckHandler and errorCheckRunnable then
-        errorCheckHandler.removeCallbacks(errorCheckRunnable)
-    end
     pcall(function()
         if currentVideoView ~= nil then
             currentVideoView.stopPlayback()
@@ -418,27 +386,46 @@ local categories = {
     Pakistan = {
         News = {
             {name="92 News HD", url="http://92news.vdn.dstreamone.net/92newshd/92hd/playlist.m3u8"},
-            {name="Dunya News", url="https://imob.dunyanews.tv/livehd/ngrp:dunyalivehd_2_all/playlist.m3u8"},
+            {name="ABN News", url="https://vodzong.mjunoon.tv:8087/streamtest/ABN-161/playlist.m3u8"},
+            {name="Dunya News", url="https://intl.dunyanews.tv/livehd/ngrp:dunyalivehd_2_all/playlist.m3u8"},
             {name="KTN News", url="https://vodzong.mjunoon.tv:8087/streamtest/KTNNews-151/playlist.m3u8"},
-            {name="Sky News Urdu", url="https://lbgo.bozztv.com/ssh101/ssh101/skynews/playlist.m3u8"},
-            {name="Lahore News", url="https://vcdn.dunyanews.tv/lahorelive/ngrp:lnews_1_all/playlist.m3u8"},
-            {name="News One", url="https://vodzong.mjunoon.tv:8087/streamtest/NEWS1-128/playlist.m3u8"}
+            {name="M News", url="https://cdn.rabta.stream/M-News/index.m3u8"},
+            {name="Neo News", url="https://vodzong.mjunoon.tv:8087/streamtest/Neo-110/playlist.m3u8"},
+            {name="News One", url="https://vodzong.mjunoon.tv:8087/streamtest/NEWS1-128/playlist.m3u8"},
+            {name="Such TV", url="https://video.primexsports.com/suchnews/live/playlist.m3u8"}
         },
         Entertainment = {
+            {name="A-Plus TV", url="http://103.86.135.164:9981/stream/channelid/1522598263?ticket=8F210F02E7EF3471D45EFD9B293E0E07CE3532BF&profile=pass"},
             {name="Aaj Entertainment", url="https://ml-pull-dvc-myco.io:2096/AAJ_ENTERTAINMENT/index.m3u8"},
-            {name="BS Film", url="https://live20.bozztv.com/akamaissh101/ssh101/bsfilm/playlist.m3u8"},
-            {name="BSTV", url="https://lbgo.bozztv.com/ssh101/ssh101/bstv/playlist.m3u8"},
+            {name="BS Film", url="https://lbgo.bozztv.com/ssh101/ssh101/bsfilm/playlist.m3u8"},
             {name="Bol Entertainment", url="https://ml-pull-dvc-myco.io:2096/BOL_ENTERTAINMENT/index.m3u8"},
+            {name="Discover Pakistan", url="https://livecdn.live247stream.com/discoverpakistan/web/playlist.m3u8"},
             {name="Express Entertainment", url="https://ml-pull-dvc-myco.io:2096/EXPRESS_ENTERTAINMENT/index.m3u8"},
             {name="Filmax", url="https://s3.ideationtec.live/Filmax/Filmax.m3u8"},
             {name="Minimax", url="https://vodzong.mjunoon.tv:8087/streamtest/disckids-157-1/playlist.m3u8"},
-            {name="Life HD", url="http://124.109.47.101/hls/stream1.m3u8"},
-            {name="Discover Pakistan", url="https://livecdn.live247stream.com/discoverpakistan/web/playlist.m3u8"},
-            {name="Zindagi TV", url="https://5ad386ff92705.streamlock.net/live_transcoder/ngrp:zindagitv.stream_all/chunklist.m3u8"}
+            {name="aurLife HD", url="http://124.109.47.101/hls/stream1.m3u8"}
         },
         Islamic = {
             {name="Madani Channel English", url="https://streaming.madanichannel.tv/static/streaming-playlists/hls/c6a600b0-82cb-454a-8953-2bb2bb372edc/master.m3u8"},
             {name="Madani Channel Urdu", url="https://streaming.madanichannel.tv/static/streaming-playlists/hls/b9790f10-cb0d-4e30-82bf-84a756234e58/master.m3u8"}
+        },
+        Other = {
+            {name="Fazal TV", url="http://cdn9.live247stream.com/punjabitvcanada/tv/playlist.m3u8"},
+            {name="God Stands Kids Club TV", url="https://online.godstands.tv:5443/WebRTCApp/streams/KidsUrdu.m3u8"},
+            {name="God Stands Kids Club TV (Arabic)", url="https://online.godstands.tv:5443/WebRTCApp/streams/KidsArabic.m3u8"},
+            {name="God Stands TV", url="https://online.godstands.tv:5443/WebRTCApp/streams/mainlive.m3u8"},
+            {name="God Stands TV (Urdu)", url="https://online.godstands.tv:5443/WebRTCApp/streams/UrduStreaming.m3u8"},
+            {name="God Stands TV (Punjabi)", url="https://online.godstands.tv:5443/WebRTCApp/streams/PunjabiStreaming.m3u8"},
+            {name="Grace Network", url="https://livecdn.live247stream.com/grace/tv/playlist.m3u8"},
+            {name="Isaac TV", url="https://livecdn.live247stream.com/isaac/tv/playlist.m3u8"},
+            {name="JooMusic", url="https://livecdn.live247stream.com/joomusic/tv/playlist.m3u8"},
+            {name="Joshua TV", url="https://livecdn.live247stream.com/joshua/tv/playlist.m3u8"},
+            {name="King TV", url="https://streamer12.vdn.dstreamone.net/kingtv/kingtv/playlist.m3u8"},
+            {name="M Sports", url="https://cdn.rabta.stream/M-Sports/index.m3u8"},
+            {name="PK Sports", url="https://lbgo.bozztv.com/ssh101/ssh101/pksportshd/playlist.m3u8"},
+            {name="PMI TV", url="https://cdn.live247stream.com/pmi/tv/playlist.m3u8"},
+            {name="Praise TV", url="https://livecdn.live247stream.com/praise/tv/playlist.m3u8"},
+            {name="Praise TV (Alt)", url="https://pixelsmedia.live/livepraisetv/index.m3u8"}
         }
     },
     India = {
@@ -468,17 +455,26 @@ local categories = {
         Music = {
             {name="MTV India", url="https://mtv-live.amagi.tv/playlist.m3u8"},
             {name="B4U Music", url="https://b4umusic.amagi.tv/playlist.m3u8"}
-        }
+        },
+        Other = {}
     },
     International = {
         News = {},
-        Entertainment = {}
+        Entertainment = {},
+        Other = {}
     },
     Sports = {
         Cricket = {
+            {name="PTV Sports", url="https://tvsen7.aynascope.net/Sports1/index.m3u8"},
+            {name="PK Sports", url="https://lbgo.bozztv.com/ssh101/ssh101/pksportshd/playlist.m3u8"},
+            {name="M Sports", url="https://cdn.rabta.stream/M-Sports/index.m3u8"},
             {name="Cricket Gold", url="https://streams2.sofast.tv/ptnr-yupptv/title-cricketgold/v1/master/611d79b11b77e2f571934fd80ca1413453772ac7/b2048bb8-1686-4432-aa50-647245383e0c/manifest.m3u8"},
             {name="Willow", url="http://tvsen5.aynascope.net/willowhd/index.m3u8"},
-            {name="Star Sports Select 1", url="http://tvsen7.aynascope.net/sspts1/index.m3u8"}
+            {name="Star Sports Select 1", url="http://tvsen7.aynascope.net/sspts1/index.m3u8"},
+            {name="DD Sports", url="https://d3qs3d2rkhfqrt.cloudfront.net/out/v1/b17adfe543354fdd8d189b110617cddd/index.m3u8"},
+            {name="DD Sports Alt", url="https://cdn-6.pishow.tv/live/13/master.m3u8"},
+            {name="Star Sports 2", url="http://tvsen5.aynascope.net/cXPB2LKkErN9/index.m3u8"},
+            {name="Star Sports Select 2", url="http://tvsen7.aynascope.net/ssport2hd/index.m3u8"}
         },
         Football = {
             {name="A Spor", url="https://rnttwmjcin.turknet.ercdn.net/lcpmvefbyo/aspor/aspor.m3u8"},
@@ -530,11 +526,12 @@ local categories = {
             {name="Polsat Sport Fight", url="http://91.146.94.234:10001/play/a070"},
             {name="Setanta Sports 1", url="http://stream.mcquack.net/234/index.m3u8"},
             {name="Setanta Sports 2", url="http://stream.mcquack.net/235/index.m3u8"}
-        }
+        },
+        Other = {}
     }
 }
 
-local showMainMenu, showCountryMenu, showSubList, showSportsList, showFavouriteCategories, showFavouriteSubList, showChannelControl, showAddChannel, showSearchChannel, showSettings, showAboutSupport, showListViewDialog
+local showMainMenu, showCountryMenu, showSubList, showSportsList, showFavouriteCategories, showFavouriteSubList, showChannelControl, showSettings, showAboutSupport, showAddChannel, showListViewDialog
 
 showListViewDialog = function(title, list, key, onBack, onItemClickFunc, categoryDesc)
     local sortedList = sortListByViews(list)
@@ -603,8 +600,6 @@ showChannelControl = function(list, index, returnScreenKey, returnFn, autoPlay, 
     local env = {}
     local currentIndex = index
 
-    local function getCurrentIdx() return currentIndex end
-
     local function updateUI(idx)
         local item = sortedList[idx]
         if not item then return end
@@ -648,7 +643,7 @@ showChannelControl = function(list, index, returnScreenKey, returnFn, autoPlay, 
                         updateUI(currentIndex)
                         playInVideoView(currentVideoView, sortedList[currentIndex].name, sortedList[currentIndex].url, function(success)
                             if success and env.playPauseBtn then env.playPauseBtn.setText("Pause") end
-                        end, sortedList, getCurrentIdx, updateUI, env.playPauseBtn)
+                        end)
                         restoreFocus(env.prevBtn)
                     end
                 },
@@ -665,7 +660,7 @@ showChannelControl = function(list, index, returnScreenKey, returnFn, autoPlay, 
                             if currentUrl ~= activeCh.url then
                                 playInVideoView(currentVideoView, activeCh.name, activeCh.url, function(success)
                                     if success then env.playPauseBtn.setText("Pause") end
-                                end, sortedList, getCurrentIdx, updateUI, env.playPauseBtn)
+                                end)
                             else
                                 local ok = pcall(function() currentVideoView.start() end)
                                 if ok then 
@@ -684,7 +679,7 @@ showChannelControl = function(list, index, returnScreenKey, returnFn, autoPlay, 
                         updateUI(currentIndex)
                         playInVideoView(currentVideoView, sortedList[currentIndex].name, sortedList[currentIndex].url, function(success)
                             if success and env.playPauseBtn then env.playPauseBtn.setText("Pause") end
-                        end, sortedList, getCurrentIdx, updateUI, env.playPauseBtn)
+                        end)
                         restoreFocus(env.nextBtn)
                     end
                 }
@@ -724,7 +719,7 @@ showChannelControl = function(list, index, returnScreenKey, returnFn, autoPlay, 
                         if isFavourite(activeCh.url) then 
                             removeFavourite(activeCh.name, activeCh.url) 
                         else 
-                            addFavourite(activeCh.name, activeCh.url, activeCh.category or "Custom")
+                            addFavourite(activeCh.name, activeCh.url, activeCh.category or "Other")
                         end
                         updateUI(currentIndex)
                         restoreFocus(env.favBtn)
@@ -804,7 +799,7 @@ showChannelControl = function(list, index, returnScreenKey, returnFn, autoPlay, 
     local activeTargetId = focusTargetId or "playPauseBtn"
     playInVideoView(videoView, ch.name, ch.url, function(success)
         if success and env.playPauseBtn then env.playPauseBtn.setText("Pause") end
-    end, sortedList, getCurrentIdx, updateUI, env.playPauseBtn)
+    end)
     
     if env[activeTargetId] then restoreFocus(env[activeTargetId]) end
 end
@@ -813,7 +808,7 @@ showFavouriteSubList = function(categoryName)
     local allFavs = loadFavourites()
     local filteredList = {}
     for _, ch in ipairs(allFavs) do
-        if string.lower(ch.category or "Custom") == string.lower(categoryName) then
+        if string.lower(ch.category or "Other") == string.lower(categoryName) then
             table.insert(filteredList, ch)
         end
     end
@@ -840,10 +835,12 @@ showFavouriteCategories = function()
                 {Button, id="btn1", text="1. News Channel", layout_width="fill", layout_height="55dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 0; showFavouriteSubList("News") end},
                 {Button, id="btn2", text="2. Entertainment Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 1; showFavouriteSubList("Entertainment") end},
                 {Button, id="btn3", text="3. Islamic Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 2; showFavouriteSubList("Islamic") end},
-                {Button, id="btn4", text="4. Music Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 3; showFavouriteSubList("Music") end}
+                {Button, id="btn4", text="4. Music Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 3; showFavouriteSubList("Music") end},
+                {Button, id="btn5", text="5. Other Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 4; showFavouriteSubList("Other") end},
+                {Button, id="btn6", text="6. Sports Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 5; showFavouriteSubList("Sports") end}
             }
         },
-        {Button, id="goBackBtn", text="5. Go Back", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); showMainMenu() end}
+        {Button, id="goBackBtn", text="7. Go Back", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); showMainMenu() end}
     }
 
     local rootView = loadlayout(layout, env)
@@ -852,6 +849,8 @@ showFavouriteCategories = function()
     registerButton(env.btn2, "btn2")
     registerButton(env.btn3, "btn3")
     registerButton(env.btn4, "btn4")
+    registerButton(env.btn5, "btn5")
+    registerButton(env.btn6, "btn6")
     registerButton(env.goBackBtn, "goBackBtn")
 
     d.setView(rootView)
@@ -877,7 +876,8 @@ showSportsList = function()
                 LinearLayout, orientation="vertical", layout_width="fill", id="menu_container",
                 {Button, id="btn1", text="Cricket Channel", layout_width="fill", layout_height="55dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 0; showSubList("Sports", "Cricket") end},
                 {Button, id="btn2", text="Football Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 1; showSubList("Sports", "Football") end},
-                {Button, id="btn3", text="Multi Sports Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 2; showSubList("Sports", "MultiSports") end}
+                {Button, id="btn3", text="Multi Sports Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 2; showSubList("Sports", "MultiSports") end},
+                {Button, id="btn4", text="Other Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 3; showSubList("Sports", "Other") end}
             }
         },
         {Button, id="goBackBtn", text="Go Back", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); showMainMenu() end}
@@ -888,6 +888,7 @@ showSportsList = function()
     registerButton(env.btn1, "btn1")
     registerButton(env.btn2, "btn2")
     registerButton(env.btn3, "btn3")
+    registerButton(env.btn4, "btn4")
     registerButton(env.goBackBtn, "goBackBtn")
 
     d.setView(rootView)
@@ -925,8 +926,12 @@ showCountryMenu = function(countryName)
 
     if countryName == "Pakistan" then
         table.insert(menuLayouts, {Button, id="btn3", text="Islamic Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 2; showSubList(countryName, "Islamic") end})
+        table.insert(menuLayouts, {Button, id="btn4", text="Other Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 3; showSubList(countryName, "Other") end})
     elseif countryName == "India" then
         table.insert(menuLayouts, {Button, id="btn3", text="Music Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 2; showSubList(countryName, "Music") end})
+        table.insert(menuLayouts, {Button, id="btn4", text="Other Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 3; showSubList(countryName, "Other") end})
+    elseif countryName == "International" then
+        table.insert(menuLayouts, {Button, id="btn3", text="Other Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 2; showSubList(countryName, "Other") end})
     end
 
     local layout = {
@@ -943,6 +948,7 @@ showCountryMenu = function(countryName)
     registerButton(env.btn1, "btn1")
     registerButton(env.btn2, "btn2")
     if env.btn3 then registerButton(env.btn3, "btn3") end
+    if env.btn4 then registerButton(env.btn4, "btn4") end
     registerButton(env.goBackBtn, "goBackBtn")
 
     d.setView(rootView)
@@ -950,167 +956,6 @@ showCountryMenu = function(countryName)
     pcall(function()
         local btn = env.menu_container.getChildAt(focusMemory[key] or 0)
         if btn then restoreFocus(btn) end
-    end)
-end
-
-local function detectCategory(name)
-    local lower = string.lower(name)
-    if string.find(lower, "news") or string.find(lower, "न्यूज") then
-        return "News"
-    elseif string.find(lower, "islamic") or string.find(lower, "madani") or string.find(lower, "qtv") or string.find(lower, "deen") then
-        return "Islamic"
-    elseif string.find(lower, "music") or string.find(lower, "sangeet") or string.find(lower, "mtv") or string.find(lower, "b4u") then
-        return "Music"
-    elseif string.find(lower, "sport") or string.find(lower, "cricket") or string.find(lower, "football") then
-        return "Sports"
-    else
-        return "Entertainment"
-    end
-end
-
-showSearchChannel = function()
-    local d = LuaDialog(service)
-    d.setTitle("Search & Voice Channel Finder")
-
-    local searchBox = EditText(service)
-    searchBox.setHint("Channel ka naam type karein ya bolein...")
-    searchBox.focusable = true
-    searchBox.focusableInTouchMode = true
-    searchBox.setSingleLine(true)
-    searchBox.setTextSize(16)
-    searchBox.setTextColor(0xFF000000)
-    searchBox.setBackgroundColor(0xFFE0E0E0)
-
-    local env = {}
-    local layout = {
-        LinearLayout, orientation="vertical", padding="20dp", layout_width="fill", layout_height="fill",
-        {
-            ScrollView, layout_width="fill", layout_height="0dp", layout_weight="1",
-            {
-                LinearLayout, orientation="vertical", layout_width="fill",
-                {TextView, text="Search Channel by Name:", layout_width="fill", textColor=0xFF2196F3, focusable=true, textSize="15sp"},
-                {
-                    LinearLayout, layout_width="fill", layout_height="wrap", layout_marginTop="4dp", layout_marginBottom="12dp",
-                    searchBox
-                },
-                {Button, id="findBtn", text="Find & Play", layout_width="fill", layout_height="55dp", focusable=true, onClick=function()
-                    local query = string.lower(tostring(searchBox.getText()))
-                    if query == "" then
-                        speak("Barah-e-karam channel ka naam type karein")
-                        return
-                    end
-                    local foundList = {}
-                    for cName, cSub in pairs(categories) do
-                        for sName, sList in pairs(cSub) do
-                            for _, ch in ipairs(sList) do
-                                if string.find(string.lower(ch.name), query) then
-                                    table.insert(foundList, ch)
-                                end
-                            end
-                        end
-                    end
-                    for _, ch in ipairs(loadFavourites()) do
-                        if string.find(string.lower(ch.name), query) then
-                            table.insert(foundList, ch)
-                        end
-                    end
-
-                    if #foundList > 0 then
-                        d.dismiss()
-                        showListViewDialog("Search Results (" .. #foundList .. ")", foundList, "search_res", showMainMenu, function(index)
-                            showChannelControl(foundList, index, "search_res", showSearchChannel, true, "playPauseBtn")
-                        end, "Aapke query ke mutabiq channel mil gaye hain")
-                        speak("Total " .. #foundList .. " channel mil gaye hain")
-                    else
-                        speak("Koi channel nahi mila, naam dobara check karein")
-                    end
-                end}
-            }
-        },
-        {Button, id="goBackBtn", text="Go Back", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); showMainMenu() end}
-    }
-
-    local rootView = loadlayout(layout, env)
-    setupFocusNavigation(rootView)
-    registerButton(env.findBtn, "findBtn")
-    registerButton(env.goBackBtn, "goBackBtn")
-
-    d.setView(rootView)
-    d.show()
-    pcall(function()
-        searchBox.requestFocus()
-        searchBox.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED)
-    end)
-    speak("Search channel screen khul gayi hai")
-end
-
-showAddChannel = function()
-    local d = LuaDialog(service)
-    d.setTitle("Add Channel")
-
-    local nameBox = EditText(service)
-    nameBox.setHint("Channel Ka Naam yahan likhein")
-    nameBox.setFocusable(true)
-    nameBox.setFocusableInTouchMode(true)
-    nameBox.setSingleLine(true)
-    nameBox.setTextSize(16)
-    nameBox.setTextColor(0xFF000000)
-    nameBox.setBackgroundColor(0xFFE0E0E0)
-    
-    local urlBox = EditText(service)
-    urlBox.setHint("Channel Ka Link (URL) yahan paste karein")
-    urlBox.setFocusable(true)
-    urlBox.setFocusableInTouchMode(true)
-    urlBox.setSingleLine(true)
-    urlBox.setTextSize(16)
-    urlBox.setTextColor(0xFF000000)
-    urlBox.setBackgroundColor(0xFFE0E0E0)
-
-    local env = {}
-    local layout = {
-        LinearLayout, orientation="vertical", padding="20dp", layout_width="fill", layout_height="fill",
-        {
-            ScrollView, layout_width="fill", layout_height="0dp", layout_weight="1",
-            {
-                LinearLayout, orientation="vertical", layout_width="fill",
-                {TextView, text="Channel Ka Naam:", layout_width="fill", textColor=0xFF2196F3, focusable=true, textSize="15sp"},
-                {
-                    LinearLayout, layout_width="fill", layout_height="wrap", layout_marginTop="4dp", layout_marginBottom="12dp",
-                    nameBox
-                },
-                {TextView, text="Channel Ka Link (URL):", layout_width="fill", textColor=0xFF2196F3, focusable=true, textSize="15sp"},
-                {
-                    LinearLayout, layout_width="fill", layout_height="wrap", layout_marginTop="4dp", layout_marginBottom="16dp",
-                    urlBox
-                },
-                {Button, id="saveBtn", text="Save Channel", layout_width="fill", layout_height="55dp", focusable=true, onClick=function()
-                    local name = tostring(nameBox.getText())
-                    local url = tostring(urlBox.getText())
-                    if name == "" or url == "" then
-                        speak("Channel ka naam aur link dono zaroori hain")
-                        return
-                    end
-                    local category = detectCategory(name)
-                    addFavourite(name, url, category)
-                    speak(name .. " channel " .. category .. " category mein save ho gaya hai")
-                    d.dismiss()
-                    showMainMenu()
-                end}
-            }
-        },
-        {Button, id="goBackBtn", text="Go Back", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); showMainMenu() end}
-    }
-
-    local rootView = loadlayout(layout, env)
-    setupFocusNavigation(rootView)
-    registerButton(env.saveBtn, "saveBtn")
-    registerButton(env.goBackBtn, "goBackBtn")
-
-    d.setView(rootView)
-    d.show()
-    pcall(function()
-        nameBox.requestFocus()
-        nameBox.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED)
     end)
 end
 
@@ -1238,6 +1083,60 @@ showAboutSupport = function()
     d.show()
 end
 
+showAddChannel = function()
+    local d = LuaDialog(service)
+    d.setTitle("Add Channel to Favourites")
+
+    local env = {}
+    local layout = {
+        LinearLayout, orientation="vertical", padding="20dp",
+        {
+            ScrollView, layout_width="fill", layout_height="0dp", layout_weight="1",
+            {
+                LinearLayout, orientation="vertical", layout_width="fill",
+                {EditText, id="nameEdit", hint="Channel Name", layout_width="fill", layout_height="55dp", layout_marginTop="4dp", focusable=true, focusableInTouchMode=true},
+                {EditText, id="linkEdit", hint="Stream URL (.m3u8)", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, focusableInTouchMode=true},
+                {Spinner, id="categorySpinner", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true},
+                {Button, id="saveBtn", text="Save Channel", layout_width="fill", layout_height="55dp", layout_marginTop="15dp", focusable=true, onClick=function()
+                    local nameStr = tostring(env.nameEdit.text or "")
+                    local linkStr = tostring(env.linkEdit.text or "")
+                    local catList = {"News", "Entertainment", "Islamic", "Music", "Other", "Sports"}
+                    local selectedIdx = 1
+                    pcall(function() selectedIdx = (env.categorySpinner.getSelectedItemPosition() + 1) end)
+                    local catStr = catList[selectedIdx] or "Other"
+
+                    if nameStr == "" or linkStr == "" then
+                        speak("Channel ka name aur link dono likhna zaroori hai")
+                    else
+                        addFavourite(nameStr, linkStr, catStr)
+                        speak("Channel successfully save ho gaya hai")
+                        d.dismiss()
+                        showMainMenu()
+                    end
+                end}
+            }
+        },
+        {Button, id="goBackBtn", text="Go Back", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); showMainMenu() end}
+    }
+
+    local rootView = loadlayout(layout, env)
+    setupFocusNavigation(rootView)
+
+    pcall(function()
+        local catList = {"News", "Entertainment", "Islamic", "Music", "Other", "Sports"}
+        local adapter = ArrayAdapter(service, android.R.layout.simple_spinner_item, catList)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        env.categorySpinner.setAdapter(adapter)
+    end)
+
+    registerButton(env.saveBtn, "saveBtn")
+    registerButton(env.goBackBtn, "goBackBtn")
+
+    d.setView(rootView)
+    d.show()
+    speak("Add channel menu open hai. Channel ka name, link aur category select karein")
+end
+
 showMainMenu = function()
     local key = "mainmenu"
     local d = LuaDialog(service)
@@ -1256,9 +1155,8 @@ showMainMenu = function()
                 {Button, id="btn4", text="International Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 3; showCountryMenu("International") end},
                 {Button, id="btn5", text="Sports Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 4; showSportsList() end},
                 {Button, id="btn6", text="Add Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 5; showAddChannel() end},
-                {Button, id="btn7", text="Search / Voice Channel", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 6; showSearchChannel() end},
-                {Button, id="btn8", text="Settings", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 7; showSettings() end},
-                {Button, id="btn9", text="About and Support", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 8; showAboutSupport() end}
+                {Button, id="btn7", text="Settings", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 6; showSettings() end},
+                {Button, id="btn8", text="About and Support", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() d.dismiss(); focusMemory[key] = 7; showAboutSupport() end}
             }
         },
         {Button, id="goBackBtn", text="Exit", layout_width="fill", layout_height="55dp", layout_marginTop="10dp", focusable=true, onClick=function() stopVideo(); d.dismiss() end}
@@ -1275,7 +1173,6 @@ showMainMenu = function()
     registerButton(env.btn6, "btn6")
     registerButton(env.btn7, "btn7")
     registerButton(env.btn8, "btn8")
-    registerButton(env.btn9, "btn9")
     registerButton(env.goBackBtn, "goBackBtn")
 
     d.setView(rootView)
