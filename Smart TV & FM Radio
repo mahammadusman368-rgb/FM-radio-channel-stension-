@@ -1,0 +1,996 @@
+require "import"
+import "android.widget.*"
+import "android.view.*"
+import "android.app.AlertDialog"
+import "android.view.WindowManager"
+import "android.media.MediaPlayer"
+import "android.media.AudioManager"
+import "android.content.Context"
+import "android.content.ClipData"
+import "android.content.Intent"
+import "android.net.Uri"
+import "android.os.Handler"
+import "android.os.Looper"
+import "java.lang.Runnable"
+import "android.view.accessibility.AccessibilityEvent"
+
+local cjson = require "cjson"
+local prefs = service.getContext().getSharedPreferences("SmartMediaHub_Prefs", Context.MODE_PRIVATE)
+local editor = prefs.edit()
+local mainHandler = Handler(Looper.getMainLooper())
+
+-- ==========================================
+-- App Name & Creator Settings
+-- ==========================================
+local APP_NAME = "Smart TV & FM Radio"
+local CREATOR = "Mohammad Usman"
+local WHATSAPP_NUMBER = "923261421100"
+
+-- ==========================================
+-- TTS & Accessibility Focus System
+-- ==========================================
+local function tts(text)
+    if service and service.speak then
+        service.speak(text)
+    end
+end
+
+local function focusOnView(v)
+    if v then
+        mainHandler.postDelayed(Runnable{run=function()
+            pcall(function()
+                v.setFocusable(true)
+                v.requestFocus()
+                v.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED)
+            end)
+        end}, 200)
+    end
+end
+
+-- ==========================================
+-- Global Variables & Media Players
+-- ==========================================
+if radio_player then pcall(function() radio_player.stop() radio_player.release() end) end
+radio_player = MediaPlayer()
+
+local audioManager = service.getSystemService(Context.AUDIO_SERVICE)
+local tv_video_view = nil
+
+local isPlaying = false
+local current_station_index = 1
+local current_playing_list = {}
+local current_category_title = ""
+local current_play_type = "" -- "RADIO" ya "TV"
+
+local active_radio_api = "https://all.api.radio-browser.info/json"
+local tv_channels_api = "https://iptv-org.github.io/api/channels.json"
+local tv_streams_api = "https://iptv-org.github.io/api/streams.json"
+
+local saved_country_index = prefs.getInt("saved_country_index", 143) -- 143 = Pakistan
+local total_country_channels = 0
+
+-- Favorites
+local list_favorites_radio = {}
+local list_favorites_tv = {}
+
+-- Radio Categories
+local list_fm = {}
+local list_radio = {}
+local list_islami_radio = {}
+
+-- TV Categories
+local list_tv_news = {}
+local list_tv_ent = {}
+local list_tv_islamic = {}
+local list_tv_music = {}
+local list_tv_sports = {}
+local list_tv_other = {}
+
+-- Timeouts
+local playRunnable = nil
+local timeoutRunnable = nil
+
+-- ==========================================
+-- Countries List
+-- ==========================================
+local countries = {
+{name="All",code="ALL"}, {name="Afghanistan",code="AF"}, {name="Albania",code="AL"}, {name="Algeria",code="DZ"}, {name="American Samoa",code="AS"}, {name="Andorra",code="AD"}, {name="Angola",code="AO"}, {name="Anguilla",code="AI"}, {name="Antarctica",code="AQ"}, {name="Antigua and Barbuda",code="AG"}, {name="Argentina",code="AR"}, {name="Armenia",code="AM"}, {name="Aruba",code="AW"}, {name="Australia",code="AU"}, {name="Austria",code="AT"}, {name="Azerbaijan",code="AZ"}, {name="Bahamas",code="BS"}, {name="Bahrain",code="BH"}, {name="Bangladesh",code="BD"}, {name="Barbados",code="BB"}, {name="Belarus",code="BY"}, {name="Belgium",code="BE"}, {name="Belize",code="BZ"}, {name="Benin",code="BJ"}, {name="Bermuda",code="BM"}, {name="Bhutan",code="BT"}, {name="Bolivia",code="BO"}, {name="Bosnia and Herzegovina",code="BA"}, {name="Botswana",code="BW"}, {name="Bouvet Island",code="BV"}, {name="Brazil",code="BR"}, {name="British Indian Ocean Territory",code="IO"}, {name="British Virgin Islands",code="VG"}, {name="Brunei",code="BN"}, {name="Bulgaria",code="BG"}, {name="Burkina Faso",code="BF"}, {name="Burundi",code="BI"}, {name="Cambodia",code="KH"}, {name="Cameroon",code="CM"}, {name="Canada",code="CA"}, {name="Cape Verde",code="CV"}, {name="Caribbean Netherlands",code="BQ"}, {name="Cayman Islands",code="KY"}, {name="Central African Republic",code="CF"}, {name="Chad",code="TD"}, {name="Chile",code="CL"}, {name="China",code="CN"}, {name="Christmas Island",code="CX"}, {name="Cocos Islands",code="CC"}, {name="Colombia",code="CO"}, {name="Comoros",code="KM"}, {name="Congo",code="CG"}, {name="Congo, Democratic Republic",code="CD"}, {name="Cook Islands",code="CK"}, {name="Costa Rica",code="CR"}, {name="Croatia",code="HR"}, {name="Cuba",code="CU"}, {name="Curaçao",code="CW"}, {name="Cyprus",code="CY"}, {name="Czech Republic",code="CZ"}, {name="Denmark",code="DK"}, {name="Djibouti",code="DJ"}, {name="Dominica",code="DM"}, {name="Dominican Republic",code="DO"}, {name="East Timor",code="TL"}, {name="Ecuador",code="EC"}, {name="Egypt",code="EG"}, {name="El Salvador",code="SV"}, {name="Equatorial Guinea",code="GQ"}, {name="Eritrea",code="ER"}, {name="Estonia",code="EE"}, {name="Eswatini",code="SZ"}, {name="Ethiopia",code="ET"}, {name="Falkland Islands",code="FK"}, {name="Faroe Islands",code="FO"}, {name="Fiji",code="FJ"}, {name="Finland",code="FI"}, {name="France",code="FR"}, {name="French Guiana",code="GF"}, {name="French Polynesia",code="PF"}, {name="French Southern Territories",code="TF"}, {name="Gabon",code="GA"}, {name="Gambia",code="GM"}, {name="Georgia",code="GE"}, {name="Germany",code="DE"}, {name="Ghana",code="GH"}, {name="Gibraltar",code="GI"}, {name="Greece",code="GR"}, {name="Greenland",code="GL"}, {name="Grenada",code="GD"}, {name="Guadeloupe",code="GP"}, {name="Guam",code="GU"}, {name="Guatemala",code="GT"}, {name="Guernsey",code="GG"}, {name="Guinea",code="GN"}, {name="Guinea-Bissau",code="GW"}, {name="Guyana",code="GY"}, {name="Haiti",code="HT"}, {name="Heard and McDonald Islands",code="HM"}, {name="Honduras",code="HN"}, {name="Hong Kong",code="HK"}, {name="Hungary",code="HU"}, {name="Iceland",code="IS"}, {name="India",code="IN"}, {name="Indonesia",code="ID"}, {name="Iran",code="IR"}, {name="Iraq",code="IQ"}, {name="Ireland",code="IE"}, {name="Isle of Man",code="IM"}, {name="Israel",code="IL"}, {name="Italy",code="IT"}, {name="Ivory Coast",code="CI"}, {name="Jamaica",code="JM"}, {name="Japan",code="JP"}, {name="Jersey",code="JE"}, {name="Jordan",code="JO"}, {name="Kazakhstan",code="KZ"}, {name="Kenya",code="KE"}, {name="Kiribati",code="KI"}, {name="Kosovo",code="XK"}, {name="Kuwait",code="KW"}, {name="Kyrgyzstan",code="KG"}, {name="Laos",code="LA"}, {name="Latvia",code="LV"}, {name="Lebanon",code="LB"}, {name="Lesotho",code="LS"}, {name="Liberia",code="LR"}, {name="Libya",code="LY"}, {name="Liechtenstein",code="LI"}, {name="Lithuania",code="LT"}, {name="Luxembourg",code="LU"}, {name="Macau",code="MO"}, {name="Madagascar",code="MG"}, {name="Malawi",code="MW"}, {name="Malaysia",code="MY"}, {name="Maldives",code="MV"}, {name="Mali",code="ML"}, {name="Malta",code="MT"}, {name="Marshall Islands",code="MH"}, {name="Martinique",code="MQ"}, {name="Mauritania",code="MR"}, {name="Mauritius",code="MU"}, {name="Mayotte",code="YT"}, {name="Mexico",code="MX"}, {name="Micronesia",code="FM"}, {name="Moldova",code="MD"}, {name="Monaco",code="MC"}, {name="Mongolia",code="MN"}, {name="Montenegro",code="ME"}, {name="Montserrat",code="MS"}, {name="Morocco",code="MA"}, {name="Mozambique",code="MZ"}, {name="Myanmar",code="MM"}, {name="Namibia",code="NA"}, {name="Nauru",code="NR"}, {name="Nepal",code="NP"}, {name="Netherlands",code="NL"}, {name="New Caledonia",code="NC"}, {name="New Zealand",code="NZ"}, {name="Nicaragua",code="NI"}, {name="Niger",code="NE"}, {name="Nigeria",code="NG"}, {name="Niue",code="NU"}, {name="Norfolk Island",code="NF"}, {name="North Korea",code="KP"}, {name="North Macedonia",code="MK"}, {name="Northern Mariana Islands",code="MP"}, {name="Norway",code="NO"}, {name="Oman",code="OM"}, {name="Pakistan",code="PK"}, {name="Palau",code="PW"}, {name="Palestine",code="PS"}, {name="Panama",code="PA"}, {name="Papua New Guinea",code="PG"}, {name="Paraguay",code="PY"}, {name="Peru",code="PE"}, {name="Philippines",code="PH"}, {name="Pitcairn Islands",code="PN"}, {name="Poland",code="PL"}, {name="Portugal",code="PT"}, {name="Puerto Rico",code="PR"}, {name="Qatar",code="QA"}, {name="Réunion",code="RE"}, {name="Romania",code="RO"}, {name="Russia",code="RU"}, {name="Rwanda",code="RW"}, {name="Saint Barthélemy",code="BL"}, {name="Saint Helena",code="SH"}, {name="Saint Kitts and Nevis",code="KN"}, {name="Saint Lucia",code="LC"}, {name="Saint Martin",code="MF"}, {name="Saint Pierre and Miquelon",code="PM"}, {name="Saint Vincent and the Grenadines",code="VC"}, {name="Samoa",code="WS"}, {name="San Marino",code="SM"}, {name="São Tomé and Príncipe",code="ST"}, {name="Saudi Arabia",code="SA"}, {name="Senegal",code="SN"}, {name="Serbia",code="RS"}, {name="Seychelles",code="SC"}, {name="Sierra Leone",code="SL"}, {name="Singapore",code="SG"}, {name="Sint Maarten",code="SX"}, {name="Slovakia",code="SK"}, {name="Slovenia",code="SI"}, {name="Solomon Islands",code="SB"}, {name="Somalia",code="SO"}, {name="South Africa",code="ZA"}, {name="South Georgia and the Sandwich Islands",code="GS"}, {name="South Korea",code="KR"}, {name="South Sudan",code="SS"}, {name="Spain",code="ES"}, {name="Sri Lanka",code="LK"}, {name="Sudan",code="SD"}, {name="Suriname",code="SR"}, {name="Svalbard and Jan Mayen",code="SJ"}, {name="Sweden",code="SE"}, {name="Switzerland",code="CH"}, {name="Syria",code="SY"}, {name="Taiwan",code="TW"}, {name="Tajikistan",code="TJ"}, {name="Tanzania",code="TZ"}, {name="Thailand",code="TH"}, {name="Togo",code="TG"}, {name="Tokelau",code="TK"}, {name="Tonga",code="TO"}, {name="Trinidad and Tobago",code="TT"}, {name="Tunisia",code="TN"}, {name="Turkey",code="TR"}, {name="Turkmenistan",code="TM"}, {name="Turks and Caicos Islands",code="TC"}, {name="Tuvalu",code="TV"}, {name="US Minor Outlying Islands",code="UM"}, {name="US Virgin Islands",code="VI"}, {name="Uganda",code="UG"}, {name="Ukraine",code="UA"}, {name="United Arab Emirates",code="AE"}, {name="United Kingdom",code="GB"}, {name="United States",code="US"}, {name="Uruguay",code="UY"}, {name="Uzbekistan",code="UZ"}, {name="Vanuatu",code="VU"}, {name="Vatican City",code="VA"}, {name="Venezuela",code="VE"}, {name="Vietnam",code="VN"}, {name="Wallis and Futuna",code="WF"}, {name="Western Sahara",code="EH"}, {name="Yemen",code="YE"}, {name="Zambia",code="ZM"}, {name="Zimbabwe",code="ZW"}, {name="Åland Islands",code="AX"}
+}
+
+-- ==========================================
+-- Hardcoded Base Channels: FM RADIO
+-- ==========================================
+local base_radio_channels = {
+  -- PAKISTAN RADIO
+  {n="Saut-ul-Quran", u="https://whmsonic.radio.gov.pk:7002/stream?type=http&nocache=12", c="PK"},
+  {n="Quran Radio Makkah", u="https://stream.radiojar.com/8s5u5tpdtwzuv", c="PK"},
+  {n="Quran Radio Madinah", u="https://stream.radiojar.com/0tpy1h0kxtzuv", c="PK"},
+  {n="Quran Radio Abdul Basit", u="https://radio.mp3islam.com/listen/abdulbasit/radio.mp3", c="PK"},
+  {n="Jan FM 91.6 (Islamic)", u="http://islamicbulletin.site:8092/;", c="PK"},
+  {n="FM 101 Islamabad", u="https://whmsonic.radio.gov.pk:7008/stream", c="PK"},
+  {n="Planet FM 87.6", u="https://whmsonic.radio.gov.pk:7042/stream", c="PK"},
+  {n="Islamabad Station", u="https://whmsonic.radio.gov.pk:7003/stream", c="PK"},
+  {n="NCAC", u="https://whmsonic.radio.gov.pk:7004/stream", c="PK"},
+  {n="World Service", u="https://whmsonic.radio.gov.pk:7005/stream", c="PK"},
+  {n="External Service", u="https://whmsonic.radio.gov.pk:7006/stream", c="PK"},
+  {n="Sports & Health Channel", u="https://whmsonic.radio.gov.pk:7007/stream", c="PK"},
+  {n="FM 101 Bahawalpur", u="https://whmsonic.radio.gov.pk:8020/relay", c="PK"},
+  {n="MW Bahawalpur", u="https://whmsonic.radio.gov.pk:8092/relay", c="PK"},
+  {n="FM 93 Faisalabad", u="https://whmsonic.radio.gov.pk:8022/relay", c="PK"},
+  {n="FM 101 Faisalabad", u="https://whmsonic.radio.gov.pk:8024/relay", c="PK"},
+  {n="FM 93 Lahore", u="https://whmsonic.radio.gov.pk:8088/stream", c="PK"},
+  {n="FM 101 Lahore", u="https://whmsonic.radio.gov.pk:7000/101lahore", c="PK"},
+  {n="Lahore MW", u="https://whmsonic.radio.gov.pk:8026/relay", c="PK"},
+  {n="FM 93 Mianwali", u="https://whmsonic.radio.gov.pk:8028/relay", c="PK"},
+  {n="FM 93 Multan", u="https://whmsonic.radio.gov.pk:7014/stream", c="PK"},
+  {n="FM 101 Multan", u="https://whmsonic.radio.gov.pk:8032/stream", c="PK"},
+  {n="Multan MW", u="https://whmsonic.radio.gov.pk:8034/stream", c="PK"},
+  {n="FM 93 Rawalpindi", u="https://whmsonic.radio.gov.pk:8036/relay", c="PK"},
+  {n="FM 101 Sialkot", u="https://whmsonic.radio.gov.pk:8038/relay", c="PK"},
+  {n="FM 101 Sargodha", u="https://whmsonic.radio.gov.pk:8040/relay", c="PK"},
+  {n="Hyderabad MW 1008KHz", u="https://whmsonic.radio.gov.pk:8042/stream", c="PK"},
+  {n="FM 101 Hyderabad", u="https://whmsonic.radio.gov.pk:8044/stream", c="PK"},
+  {n="FM 101 Karachi", u="https://whmsonic.radio.gov.pk:8048/stream", c="PK"},
+  {n="FM 93 Karachi", u="https://whmsonic.radio.gov.pk:7022/stream", c="PK"},
+  {n="FM 101 Larkana", u="https://whmsonic.radio.gov.pk:8050/stream", c="PK"},
+  {n="FM 101 Mithi", u="https://whmsonic.radio.gov.pk:8052/stream", c="PK"},
+  {n="FM 101 Khairpur", u="https://whmsonic.radio.gov.pk:8054/stream", c="PK"},
+  {n="MW 639 Karachi", u="https://whmsonic.radio.gov.pk:7000/MW639khi", c="PK"},
+  {n="FM 101.4 Bhitshah", u="https://whmsonic.radio.gov.pk:8098/stream", c="PK"},
+  {n="FM 101 Quetta", u="https://whmsonic.radio.gov.pk:8058/stream", c="PK"},
+  {n="Quetta MW", u="https://whmsonic.radio.gov.pk:8060/relay", c="PK"},
+  {n="Khuzdar MW 567", u="https://whmsonic.radio.gov.pk:8062/stream", c="PK"},
+  {n="FM 101 Peshawar", u="https://whmsonic.radio.gov.pk:8070/relay", c="PK"},
+  {n="Peshawar MW", u="https://whmsonic.radio.gov.pk:8072/relay", c="PK"},
+  {n="FM 101 Kohat", u="https://whmsonic.radio.gov.pk:8068/relay", c="PK"},
+  {n="FM 101 Abbotabad", u="https://whmsonic.radio.gov.pk:8064/relay", c="PK"},
+  {n="FM 93 Chitral", u="https://whmsonic.radio.gov.pk:8066/relay", c="PK"},
+  {n="D.I. Khan MW 711", u="https://whmsonic.radio.gov.pk:7000/Dikhan", c="PK"},
+  {n="FM 101 Mirpur", u="https://whmsonic.radio.gov.pk:8078/relay", c="PK"},
+  {n="FM 93 Muzaffarabad", u="https://whmsonic.radio.gov.pk:7000/93muzaffarabad", c="PK"},
+  {n="Azad Kashmir Radio Mirpur", u="https://whmsonic.radio.gov.pk:8074/relay", c="PK"},
+  {n="Gilgit MW 1512Khz", u="https://whmsonic.radio.gov.pk:8082/relay", c="PK"},
+  {n="FM 93 Gilgit", u="https://whmsonic.radio.gov.pk:8090/relay", c="PK"},
+  {n="MW 1557 Skardu", u="https://whmsonic.radio.gov.pk:8080/relay", c="PK"},
+  {n="FM93 Skardu", u="https://whmsonic.radio.gov.pk:8104/relay", c="PK"},
+  {n="Shalimar FM 94.6", u="http://s3.voscast.com:8534/;stream.mp3", c="PK"},
+  {n="Radio Jeevay Pakistan", u="https://s7.reliastream.com/proxy/tahash07?mp=/stream", c="PK"},
+  {n="FM 100 Lahore", u="https://cast4.servcast.net/proxy/fm100lhr/stream", c="PK"},
+  {n="Hot FM 105 Karachi", u="https://cc.vmakerhost.com/proxy/sc_khi1?mp=/stream", c="PK"},
+  {n="Hum FM 106.2", u="https://ice10.securenetsystems.net/HUMFM", c="PK"},
+  {n="Suno FM Urdu", u="https://stream.sunofmradio.com:8443/URDURECORD", c="PK"},
+  {n="Suno FM Pashto", u="https://stream.sunofmradio.com:8443/PSCRECORD", c="PK"},
+  {n="Suno FM Balochi", u="https://stream.sunofmradio.com:8443/QUETARECORD", c="PK"},
+  {n="Suno FM Balti", u="https://stream.sunofmradio.com:8443/GILGITRECORD", c="PK"},
+  {n="Suno FM Saraiki", u="https://stream.sunofmradio.com:8443/MultanStudio", c="PK"},
+  {n="Suno FM Kashmiri", u="https://stream.sunofmradio.com:8443/KASHMIRRECORD", c="PK"},
+  {n="Suno FM Sindhi", u="https://stream.sunofmradio.com:8443/KCIRECORD", c="PK"},
+  {n="FM 100 Pakistan", u="http://162.244.80.118:4900/;stream.mp3", c="PK"},
+  {n="FM 100 Pakistan Karachi", u="http://162.244.80.118:3024/stream.mp3?ver=349829", c="PK"},
+  {n="FM 100 Islamabad", u="http://162.244.80.118:4900/stream.mp3?ver=604498", c="PK"},
+  {n="Samaa FM 107.4", u="https://samaakhi107-itelservices.radioca.st/stream", c="PK"},
+  {n="Mera FM 107.4 Lahore", u="https://samaalhr107-itelservices.radioca.st/stream", c="PK"},
+  {n="Apna Karachi 107 FM", u="http://streaming.apnakarachi107.fm:7070/live107", c="PK"},
+  {n="Awam FM", u="http://server.mediacast4u.stream:8010/stream", c="PK"},
+  {n="Hot FM 89 Layyah", u="https://stream.zeno.fm/rupdjglocbvtv", c="PK"},
+  {n="Hot FM Sanghar", u="http://cc.vmakerhost.com/proxy/sc_sang?mp=/stream", c="PK"},
+  {n="Hot FM 105 Badin", u="http://cc.vmakerhost.com:8000/listen.mp3", c="PK"},
+  {n="ON FM 91.6 Khanewal", u="https://stream.zeno.fm/evbchqja5oetv", c="PK"},
+  {n="Radio Jeevay Khanewal", u="http://s7.reliastream.com:8218/Tune-In", c="PK"},
+  {n="Radio Jeevay Bahawalpur", u="http://canada1.reliastream.com:8155/;", c="PK"},
+  {n="Buzz FM", u="http://fusion.shoutca.st:8112/stream", c="PK"},
+  {n="Pak 100", u="https://stream.zeno.fm/4bav1shcna0uv", c="PK"},
+  {n="Radio FM World Pakistan", u="https://stream.zeno.fm/tty4gmu30ehvv", c="PK"},
+  {n="All 4Masti", u="https://stream.zeno.fm/31huk9y8u68uv", c="PK"},
+  {n="All 4Masti Sargodha", u="https://stream.zeno.fm/bahhkuge5zhvv", c="PK"},
+  {n="Hot FM 105 Quetta", u="http://cc.vmakerhost.com:8066/;", c="PK"},
+  {n="JEAY Matiari FM 91.6", u="https://cc.vmakerhost.com/proxy/jeayfm?mp=/matiari", c="PK"},
+  {n="JEAY Sukkur FM 88", u="https://ssl.rockhost.com/proxy/sukkur?mp=/stream", c="PK"},
+  {n="JEAY Larkana FM 88", u="https://ssl.rockhost.com/proxy/larkana?mp=/stream", c="PK"},
+  {n="JEAY Mirpurkhas FM 88", u="https://ssl.rockhost.com/proxy/mirpurkhas?mp=/stream", c="PK"},
+  {n="JEAY Moro-Naushero FM 88", u="https://ssl.rockhost.com/proxy/moro?mp=/stream", c="PK"},
+  {n="JEAY Mehrabpur FM 94", u="https://cc.vmakerhost.com/proxy/jeayfm?mp=/mehrabpurfm94", c="PK"},
+  {n="JEAY Sakrand Nawabshah FM 90.8", u="https://cc.vmakerhost.com/proxy/jeayfm2?mp=/sakrand", c="PK"},
+  {n="JEAY Matli FM 90.4", u="https://cc.vmakerhost.com/proxy/jeayfm2?mp=/matli", c="PK"},
+  {n="Radio Awaz Karachi FM 99", u="https://karachifm99-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Lahore FM 99.4", u="https://lahorefm994-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Hyderabad FM 99.4", u="https://jamshorofm994-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Attock FM 107", u="https://attockfm107-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Gujranwala FM 106", u="https://gujranwalafm106-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Gujrat FM 105", u="https://gujratfm105-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Sheikhupura FM 107", u="https://skpfm107-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Bhalwal FM 104", u="https://bwpfm104-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Jhang FM 105", u="https://jhangfm105-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Okara FM 105", u="https://okarafm1054-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Rajanpur FM 104", u="https://rajanpurfm104-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Bahawalpur FM 105", u="https://bwpfm105-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Khanpur FM 106", u="https://khanpurfm106-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Pakpattan FM 107", u="https://pakpatanfm107-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Sahiwal FM 105", u="https://sahiwalfm105-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="Radio Awaz Sadiqabad FM 105", u="https://sdkfm105-awazradionetwork.radioca.st/stream", c="PK"},
+  {n="City FM 89 Pakistan", u="https://radio.cityfm89.com/stream", c="PK"},
+  {n="Mast FM 103 Lahore", u="http://110.36.229.158:8000/", c="PK"},
+  {n="Radio One FM 91", u="https://cc.vmakerhost.com/proxy/karachi?mp=/stream", c="PK"},
+  
+  -- INDIA RADIO
+  {n="Vividh Bharati", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio012/playlist.m3u8", c="IN"},
+  {n="FM Gold Delhi", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio214/playlist.m3u8", c="IN"},
+  {n="FM Rainbow Delhi", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio216/playlist.m3u8", c="IN"},
+  {n="AIR FM Rainbow Mumbai", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio220/playlist.m3u8", c="IN"},
+  {n="AIR FM Gold Mumbai", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio218/playlist.m3u8", c="IN"},
+  {n="AIR Rohtak", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio051/playlist.m3u8", c="IN"},
+  {n="AIR Shimla", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio053/playlist.m3u8", c="IN"},
+  {n="AIR Srinagar", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio056/playlist.m3u8", c="IN"},
+  {n="AIR Jammu", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio054/playlist.m3u8", c="IN"},
+  {n="AIR Indore", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio090/playlist.m3u8", c="IN"},
+  {n="AIR Bhopal", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio089/playlist.m3u8", c="IN"},
+  {n="AIR Jaipur", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio121/playlist.m3u8", c="IN"},
+  {n="AIR Patna", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio102/playlist.m3u8", c="IN"},
+  {n="AIR Vividh Bharati Lucknow", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio146/playlist.m3u8", c="IN"},
+  {n="AIR FM Rainbow Hyderabad", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio222/playlist.m3u8", c="IN"},
+  {n="AIR FM Rainbow Bangalore", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio223/playlist.m3u8", c="IN"},
+  {n="AIR FM Gold Chennai", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio219/playlist.m3u8", c="IN"},
+  {n="AIR FM Rainbow Chennai", u="http://air.pc.cdn.bitgravity.com/air/live/pbaudio221/playlist.m3u8", c="IN"}
+}-- ==========================================
+-- Hardcoded Base Channels: LIVE TV (Pak, India, Sports)
+-- ==========================================
+local base_tv_channels = {
+  -- Pakistan TV (News)
+  {n="92 News HD", u="http://92news.vdn.dstreamone.net/92newshd/92hd/playlist.m3u8", c="PK", cat="News"},
+  {n="ABN News", u="https://vodzong.mjunoon.tv:8087/streamtest/ABN-161/playlist.m3u8", c="PK", cat="News"},
+  {n="Dunya News", u="https://intl.dunyanews.tv/livehd/ngrp:dunyalivehd_2_all/playlist.m3u8", c="PK", cat="News"},
+  {n="KTN News", u="https://vodzong.mjunoon.tv:8087/streamtest/KTNNews-151/playlist.m3u8", c="PK", cat="News"},
+  {n="M News", u="https://cdn.rabta.stream/M-News/index.m3u8", c="PK", cat="News"},
+  {n="Neo News", u="https://vodzong.mjunoon.tv:8087/streamtest/Neo-110/playlist.m3u8", c="PK", cat="News"},
+  {n="News One", u="https://vodzong.mjunoon.tv:8087/streamtest/NEWS1-128/playlist.m3u8", c="PK", cat="News"},
+  {n="Such TV", u="https://video.primexsports.com/suchnews/live/playlist.m3u8", c="PK", cat="News"},
+  
+  -- Pakistan TV (Entertainment)
+  {n="A-Plus TV", u="http://103.86.135.164:9981/stream/channelid/1522598263?ticket=8F210F02E7EF3471D45EFD9B293E0E07CE3532BF&profile=pass", c="PK", cat="Entertainment"},
+  {n="Aaj Entertainment", u="https://ml-pull-dvc-myco.io:2096/AAJ_ENTERTAINMENT/index.m3u8", c="PK", cat="Entertainment"},
+  {n="BS Film", u="https://lbgo.bozztv.com/ssh101/ssh101/bsfilm/playlist.m3u8", c="PK", cat="Entertainment"},
+  {n="Bol Entertainment", u="https://ml-pull-dvc-myco.io:2096/BOL_ENTERTAINMENT/index.m3u8", c="PK", cat="Entertainment"},
+  {n="Discover Pakistan", u="https://livecdn.live247stream.com/discoverpakistan/web/playlist.m3u8", c="PK", cat="Entertainment"},
+  {n="Express Entertainment", u="https://ml-pull-dvc-myco.io:2096/EXPRESS_ENTERTAINMENT/index.m3u8", c="PK", cat="Entertainment"},
+  {n="Filmax", u="https://s3.ideationtec.live/Filmax/Filmax.m3u8", c="PK", cat="Entertainment"},
+  {n="Minimax", u="https://vodzong.mjunoon.tv:8087/streamtest/disckids-157-1/playlist.m3u8", c="PK", cat="Entertainment"},
+  {n="aurLife HD", u="http://124.109.47.101/hls/stream1.m3u8", c="PK", cat="Entertainment"},
+  
+  -- Pakistan TV (Islamic)
+  {n="Madani Channel English", u="https://streaming.madanichannel.tv/static/streaming-playlists/hls/c6a600b0-82cb-454a-8953-2bb2bb372edc/master.m3u8", c="PK", cat="Islamic"},
+  {n="Madani Channel Urdu", u="https://streaming.madanichannel.tv/static/streaming-playlists/hls/b9790f10-cb0d-4e30-82bf-84a756234e58/master.m3u8", c="PK", cat="Islamic"},
+  
+  -- Pakistan TV (Other)
+  {n="Fazal TV", u="http://cdn9.live247stream.com/punjabitvcanada/tv/playlist.m3u8", c="PK", cat="Other"},
+  {n="God Stands TV (Urdu)", u="https://online.godstands.tv:5443/WebRTCApp/streams/UrduStreaming.m3u8", c="PK", cat="Other"},
+  {n="Grace Network", u="https://livecdn.live247stream.com/grace/tv/playlist.m3u8", c="PK", cat="Other"},
+  {n="Isaac TV", u="https://livecdn.live247stream.com/isaac/tv/playlist.m3u8", c="PK", cat="Other"},
+  
+  -- India TV (News & Entertainment)
+  {n="Aaj Tak", u="https://feeds.intoday.in/aajtak/api/aajtakhd/master.m3u8", c="IN", cat="News"},
+  {n="ABP News", u="https://d1rc86nwwc9fag.cloudfront.net/vglive-sk-472500/abpnews/master.m3u8", c="IN", cat="News"},
+  {n="Zee News", u="https://dknttpxmr0dwf.cloudfront.net/index_57.m3u8", c="IN", cat="News"},
+  {n="India TV", u="https://pl-indiatvnews.akamaized.net/out/v1/db79179b608641ceaa5a4d0dd0dca8da/index.m3u8", c="IN", cat="News"},
+  {n="Republic TV", u="https://d3qs3d2rkhfqrt.cloudfront.net/out/v1/2e31d831f08640ff92f65003bdc89991/index.m3u8", c="IN", cat="News"},
+  {n="Colors", u="http://149.71.34.166:8000/play/a00c/index.m3u8", c="IN", cat="Entertainment"},
+  {n="Zee TV", u="http://41.205.77.102/ZEE-TV/index.m3u8", c="IN", cat="Entertainment"},
+  {n="Zee Cinema", u="https://amg17931-zee-amg17931c5-samsung-au-8873.playouts.now.amagi.tv/playlist.m3u8", c="IN", cat="Entertainment"},
+  {n="StarPlus", u="https://trs1.aynaott.com/starplushd/index.m3u8", c="IN", cat="Entertainment"},
+  {n="Sony Entertainment", u="http://stb-air.wasmer.app/play.php?id=LIVETV_LIVETVCHANNEL_SET_HD&pass=krish-ka&uid=gana-sunega", c="IN", cat="Entertainment"},
+  {n="MTV India", u="https://mtv-live.amagi.tv/playlist.m3u8", c="IN", cat="Music"},
+
+  -- Sports TV (Available in ALL)
+  {n="PTV Sports", u="https://tvsen7.aynascope.net/Sports1/index.m3u8", c="ALL", cat="Sports"},
+  {n="PK Sports", u="https://lbgo.bozztv.com/ssh101/ssh101/pksportshd/playlist.m3u8", c="ALL", cat="Sports"},
+  {n="M Sports", u="https://cdn.rabta.stream/M-Sports/index.m3u8", c="ALL", cat="Sports"},
+  {n="Cricket Gold", u="https://streams2.sofast.tv/ptnr-yupptv/title-cricketgold/v1/master/611d79b11b77e2f571934fd80ca1413453772ac7/b2048bb8-1686-4432-aa50-647245383e0c/manifest.m3u8", c="ALL", cat="Sports"},
+  {n="Willow", u="http://tvsen5.aynascope.net/willowhd/index.m3u8", c="ALL", cat="Sports"},
+  {n="Star Sports Select 1", u="http://tvsen7.aynascope.net/sspts1/index.m3u8", c="ALL", cat="Sports"},
+  {n="DD Sports", u="https://d3qs3d2rkhfqrt.cloudfront.net/out/v1/b17adfe543354fdd8d189b110617cddd/index.m3u8", c="ALL", cat="Sports"},
+  {n="ESPN", u="http://181.78.197.59:8000/play/a07z/index.m3u8", c="ALL", cat="Sports"}
+}
+
+-- ==========================================
+-- Favorites Persistence System
+-- ==========================================
+local function loadFavorites()
+    local fav_radio = prefs.getString("favorites_radio", "[]")
+    local fav_tv = prefs.getString("favorites_tv", "[]")
+    pcall(function() list_favorites_radio = cjson.decode(fav_radio) end)
+    pcall(function() list_favorites_tv = cjson.decode(fav_tv) end)
+    if type(list_favorites_radio) ~= "table" then list_favorites_radio = {} end
+    if type(list_favorites_tv) ~= "table" then list_favorites_tv = {} end
+end
+
+local function saveFavorites()
+    editor.putString("favorites_radio", cjson.encode(list_favorites_radio))
+    editor.putString("favorites_tv", cjson.encode(list_favorites_tv))
+    editor.apply()
+end
+
+local function isFavorite(url, play_type)
+    local list = (play_type == "RADIO") and list_favorites_radio or list_favorites_tv
+    for i, v in ipairs(list) do
+        if v.u == url then return true, i end
+    end
+    return false, 0
+end
+
+loadFavorites()
+
+-- ==========================================
+-- Categorize API Data (Radio + TV)
+-- ==========================================
+local function categorizeRadioChannels(api_data, country_code)
+    list_fm = {} list_radio = {} list_islami_radio = {}
+    local unique_urls = {}
+
+    local function addChannel(name, url, code)
+        if url == nil or url == "" or unique_urls[url] then return end
+        unique_urls[url] = true
+        local lname = string.lower(name)
+        local ch = {n = name, u = url, c = code, type = "RADIO"}
+        
+        if string.find(lname, "islam") or string.find(lname, "quran") or string.find(lname, "makkah") or string.find(lname, "madinah") or string.find(lname, "tilawat") then
+            table.insert(list_islami_radio, ch)
+        elseif string.find(lname, "fm ") or string.find(lname, " fm") or string.find(lname, "fm") then
+            table.insert(list_fm, ch)
+        else
+            table.insert(list_radio, ch) 
+        end
+    end
+
+    for _, ch in ipairs(base_radio_channels) do
+        if ch.c == country_code or country_code == "ALL" then addChannel(ch.n, ch.u, ch.c) end
+    end
+    
+    if api_data and type(api_data) == "table" then
+        for i=1, #api_data do addChannel(api_data[i].name or "Unknown", api_data[i].url_resolved or api_data[i].url or "", country_code) end
+    end
+    total_country_channels = #list_fm + #list_radio + #list_islami_radio
+end
+
+local function categorizeTVChannels(api_data, country_code)
+    list_tv_news = {} list_tv_ent = {} list_tv_islamic = {} list_tv_music = {} list_tv_sports = {} list_tv_other = {}
+    local unique_urls = {}
+
+    local function addChannel(name, url, code, cat)
+        if url == nil or url == "" or unique_urls[url] then return end
+        unique_urls[url] = true
+        
+        local lname = string.lower(name)
+        local ccat = string.lower(cat or "")
+        local ch = {n = name, u = url, c = code, type = "TV"}
+        
+        if ccat == "news" or string.find(lname, "news") then table.insert(list_tv_news, ch)
+        elseif ccat == "entertainment" or ccat == "movies" or string.find(lname, "tv") or string.find(lname, "cinema") then table.insert(list_tv_ent, ch)
+        elseif ccat == "music" or string.find(lname, "music") then table.insert(list_tv_music, ch)
+        elseif ccat == "sports" or string.find(lname, "sport") or string.find(lname, "cricket") then table.insert(list_tv_sports, ch)
+        elseif ccat == "islamic" or string.find(lname, "islam") or string.find(lname, "madani") or string.find(lname, "quran") then table.insert(list_tv_islamic, ch)
+        else table.insert(list_tv_other, ch) end
+    end
+
+    for _, ch in ipairs(base_tv_channels) do
+        if ch.c == country_code or ch.c == "ALL" then addChannel(ch.n, ch.u, ch.c, ch.cat) end
+    end
+    
+    if api_data and type(api_data) == "table" then
+        for i=1, #api_data do 
+            local cat = (api_data[i].categories and #api_data[i].categories > 0) and api_data[i].categories[1] or "Other"
+            addChannel(api_data[i].name or "Unknown", api_data[i].url or "", country_code, cat) 
+        end
+    end
+    total_country_channels = #list_tv_news + #list_tv_ent + #list_tv_islamic + #list_tv_music + #list_tv_sports + #list_tv_other
+end-- ==========================================
+-- Universal Player (Radio + TV) with 15s Timeout & TTS
+-- ==========================================
+local views = {} 
+local channelAdapter = nil
+
+local function updatePlayerUI(station, status)
+    if not station then return end 
+    if views.tv_player_status then views.tv_player_status.setText(status or "Playing: " .. station.n) end
+    if views.btn_play_pause then views.btn_play_pause.setText(isPlaying and "Pause" or "Play") end
+    if views.btn_fav then
+        local isFav, _ = isFavorite(station.u, station.type)
+        views.btn_fav.setText(isFav and "Remove from Favorite" or "Add to Favorite")
+    end
+end
+
+local function playStation(index, channel_list)
+    if not channel_list or #channel_list == 0 then 
+        tts("List khali hai.") 
+        return 
+    end
+    if index > #channel_list then index = 1 end
+    if index < 1 then index = #channel_list end
+    
+    current_station_index = index
+    local station = channel_list[index]
+    current_play_type = station.type
+    
+    -- Stop existing streams
+    pcall(function() radio_player.stop() radio_player.reset() end)
+    pcall(function() 
+        if tv_video_view then 
+            tv_video_view.stopPlayback() 
+            tv_video_view.setVisibility(View.GONE) 
+        end 
+    end)
+    
+    isPlaying = false
+    updatePlayerUI(station, "Status: Starting " .. station.n .. "...")
+    tts(station.n .. " load ho raha hai")
+    
+    if playRunnable then mainHandler.removeCallbacks(playRunnable) end
+    if timeoutRunnable then mainHandler.removeCallbacks(timeoutRunnable) end
+    
+    -- 1 SECOND DELAY FOR FAST PLAY
+    playRunnable = Runnable{
+        run = function()
+            pcall(function()
+                if station.type == "RADIO" then
+                    radio_player.setAudioStreamType(AudioManager.STREAM_MUSIC)
+                    radio_player.setDataSource(station.u)
+                    radio_player.prepareAsync()
+                    updatePlayerUI(station, "Status: Buffering " .. station.n .. "...")
+                    
+                    radio_player.setOnPreparedListener(MediaPlayer.OnPreparedListener{
+                        onPrepared = function(mp)
+                            mp.start()
+                            isPlaying = true
+                            if timeoutRunnable then mainHandler.removeCallbacks(timeoutRunnable) timeoutRunnable = nil end
+                            updatePlayerUI(station, "Playing: " .. station.n)
+                            tts(station.n .. " play ho gaya hai")
+                        end
+                    })
+                    radio_player.setOnErrorListener(MediaPlayer.OnErrorListener{
+                        onError = function(mp, what, extra)
+                            isPlaying = false
+                            updatePlayerUI(station, "Status: Error Playing " .. station.n)
+                            return true
+                        end
+                    })
+                    
+                elseif station.type == "TV" then
+                    local videoMode = prefs.getString("video_display_mode", "ON")
+                    if videoMode == "ON" and tv_video_view then
+                        tv_video_view.setVisibility(View.VISIBLE)
+                    end
+                    tv_video_view.setVideoURI(Uri.parse(station.u))
+                    tv_video_view.setOnPreparedListener(MediaPlayer.OnPreparedListener{
+                        onPrepared = function(mp)
+                            mp.start()
+                            isPlaying = true
+                            if timeoutRunnable then mainHandler.removeCallbacks(timeoutRunnable) timeoutRunnable = nil end
+                            updatePlayerUI(station, "Playing: " .. station.n)
+                            tts(station.n .. " play ho gaya hai")
+                        end
+                    })
+                    tv_video_view.setOnErrorListener(MediaPlayer.OnErrorListener{
+                        onError = function(mp, what, extra)
+                            isPlaying = false
+                            updatePlayerUI(station, "Status: Error Playing " .. station.n)
+                            return true
+                        end
+                    })
+                    tv_video_view.start()
+                end
+            end)
+            
+            -- 15 SECOND TIMEOUT AUTO-REMOVE LOGIC
+            timeoutRunnable = Runnable{
+                run = function()
+                    if not isPlaying then
+                        tts(station.n .. " server down hai, isko remove kar ke agla channel play kar raha hoon.")
+                        table.remove(channel_list, current_station_index)
+                        
+                        -- Update adapter instantly
+                        if channelAdapter then
+                            channelAdapter.clear()
+                            for _, v in ipairs(channel_list) do channelAdapter.add(v.n) end
+                        end
+                        
+                        -- Remove from Favorites if playing from there
+                        if current_category_title == "Favorites" then 
+                            local isFav, fIdx = isFavorite(station.u, station.type)
+                            if isFav then 
+                                if station.type == "RADIO" then table.remove(list_favorites_radio, fIdx)
+                                else table.remove(list_favorites_tv, fIdx) end
+                                saveFavorites() 
+                            end
+                        end
+                        
+                        -- Play Next Automatic
+                        if #channel_list > 0 then
+                            if current_station_index > #channel_list then current_station_index = 1 end
+                            playStation(current_station_index, channel_list)
+                        else
+                            tts("List khatam ho gayi.")
+                            updatePlayerUI({n="None", u="", type=station.type}, "Status: No Channels Left")
+                        end
+                    end
+                end
+            }
+            mainHandler.postDelayed(timeoutRunnable, 15000) -- EXACTLY 15 SECONDS WAIT
+        end
+    }
+    mainHandler.postDelayed(playRunnable, 1000) -- EXACTLY 1 SECOND PLAY DELAY
+end
+
+-- ==========================================
+-- Page Switcher (Focus Lock System)
+-- ==========================================
+local function switchPage(page_name, focus_element)
+    views.page_main.setVisibility(View.GONE)
+    views.page_categories.setVisibility(View.GONE)
+    views.page_list.setVisibility(View.GONE)
+    views.page_player.setVisibility(View.GONE)
+    views.page_settings.setVisibility(View.GONE)
+    views.page_countries.setVisibility(View.GONE)
+    
+    views[page_name].setVisibility(View.VISIBLE)
+    if focus_element then focusOnView(focus_element) end
+end
+
+-- ==========================================
+-- Native Layout Design (Fixed Bottom Bars)
+-- ==========================================
+local function buildLayout()
+    local main_layout = {
+        FrameLayout, layout_width="fill", layout_height="fill", backgroundColor="#ffffff",
+        
+        -- PAGE 1: MAIN MENU
+        { RelativeLayout, id="page_main", layout_width="fill", layout_height="fill",
+            { LinearLayout, id="mainBottomBar", layout_width="fill", layout_height="wrap_content", layout_alignParentBottom="true", padding="10dp", gravity="center",
+                { Button, id="btn_exit", text="Exit / Close App", layout_width="fill", layout_height="60dp" }
+            },
+            { ScrollView, layout_width="fill", layout_height="fill", layout_above="mainBottomBar",
+                { LinearLayout, orientation="vertical", layout_width="fill", layout_height="wrap_content", padding="15dp",
+                    { TextView, id="tv_main_title", text=APP_NAME, textSize="26sp", gravity="center", textColor="#4CAF50", layout_marginBottom="30dp", layout_width="fill", focusable=true },
+                    { Button, id="btn_nav_fm", text="FM Radio Channels", layout_width="fill", layout_marginBottom="15dp", layout_height="60dp" },
+                    { Button, id="btn_nav_tv", text="Live TV Channels", layout_width="fill", layout_marginBottom="15dp", layout_height="60dp" },
+                    { Button, id="btn_nav_settings", text="Settings & Support", layout_width="fill", layout_marginBottom="15dp", layout_height="60dp" }
+                }
+            }
+        },
+        
+        -- PAGE 2: SETTINGS & SUPPORT (Combined)
+        { RelativeLayout, id="page_settings", layout_width="fill", layout_height="fill", visibility=View.GONE,
+            { LinearLayout, id="setBottomBar", layout_width="fill", layout_height="wrap_content", layout_alignParentBottom="true", padding="10dp", gravity="center",
+                { Button, id="btn_settings_back", text="Go Back", layout_width="fill", layout_height="60dp" }
+            },
+            { ScrollView, layout_width="fill", layout_height="fill", layout_above="setBottomBar",
+                { LinearLayout, orientation="vertical", layout_width="fill", layout_height="wrap_content", padding="15dp",
+                    { TextView, id="tv_set_title", text="Settings & Support", textSize="22sp", gravity="center", textColor="#2196F3", layout_marginBottom="20dp", layout_width="fill", focusable=true },
+                    { EditText, id="edt_sleep", hint="Sleep Timer (e.g., 30 mins)", inputType=2, layout_width="fill", layout_marginBottom="10dp" },
+                    { Button, id="btn_set_sleep", text="Set Sleep Timer", layout_width="fill", layout_height="55dp", layout_marginBottom="20dp" },
+                    { Button, id="btn_video_mode", text="Video Display Mode: ON", layout_width="fill", layout_height="55dp", layout_marginBottom="20dp" },
+                    { TextView, text="Creator: " .. CREATOR, textSize="18sp", gravity="center", layout_marginBottom="10dp", layout_width="fill", focusable=true },
+                    { Button, id="btn_copy_wa", text="Copy WhatsApp Number", layout_width="fill", layout_height="55dp", layout_marginBottom="10dp" },
+                    { Button, id="btn_contact_wa", text="Contact on WhatsApp", layout_width="fill", layout_height="55dp", layout_marginBottom="10dp" }
+                }
+            }
+        },
+
+        -- PAGE 3: CATEGORIES (RADIO & TV)
+        { RelativeLayout, id="page_categories", layout_width="fill", layout_height="fill", visibility=View.GONE,
+            { LinearLayout, id="catBottomBar", layout_width="fill", layout_height="wrap_content", layout_alignParentBottom="true", padding="10dp", gravity="center",
+                { Button, id="btn_cat_back", text="Go Back to Menu", layout_width="fill", layout_height="60dp" }
+            },
+            { LinearLayout, orientation="vertical", layout_width="fill", layout_height="fill", layout_above="catBottomBar", padding="15dp",
+                { TextView, id="tv_cat_title", text="Categories", textSize="22sp", gravity="center", textColor="#2196F3", layout_marginBottom="15dp", layout_width="fill", focusable=true },
+                { Button, id="btn_select_country", text="Select Country", layout_width="fill", layout_marginBottom="10dp" },
+                { TextView, id="tv_loading_cat", text="Loading channels...", textSize="16sp", gravity="center", visibility=View.GONE, layout_marginBottom="10dp", layout_width="fill" },
+                { ScrollView, layout_width="fill", layout_height="fill",
+                    { LinearLayout, orientation="vertical", layout_width="fill",
+                        { Button, id="cat_fav", text="Favorite Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp" },
+                        -- Radio Categories
+                        { Button, id="cat_fm", text="FM Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE },
+                        { Button, id="cat_radio", text="Radio Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE },
+                        { Button, id="cat_islami_radio", text="Islami Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE },
+                        -- TV Categories
+                        { Button, id="cat_tv_news", text="News Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE },
+                        { Button, id="cat_tv_ent", text="Entertainment & Movies", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE },
+                        { Button, id="cat_tv_islamic", text="Islamic Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE },
+                        { Button, id="cat_tv_music", text="Music Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE },
+                        { Button, id="cat_tv_sports", text="Sports Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE },
+                        { Button, id="cat_tv_other", text="Other Channels", layout_width="fill", layout_marginBottom="10dp", layout_height="55dp", visibility=View.GONE }
+                    }
+                }
+            }
+        },
+
+        -- PAGE 4: COUNTRY LIST
+        { RelativeLayout, id="page_countries", layout_width="fill", layout_height="fill", visibility=View.GONE,
+            { LinearLayout, id="countryBottomBar", layout_width="fill", layout_height="wrap_content", layout_alignParentBottom="true", padding="10dp", gravity="center",
+                { Button, id="btn_countries_back", text="Cancel", layout_width="fill", layout_height="60dp" }
+            },
+            { LinearLayout, orientation="vertical", layout_width="fill", layout_height="fill", layout_above="countryBottomBar", padding="15dp",
+                { TextView, id="tv_country_title", text="Select Country", textSize="20sp", gravity="center", layout_marginBottom="10dp", layout_width="fill", focusable=true },
+                { ListView, id="lv_countries", layout_width="fill", layout_height="fill" }
+            }
+        },
+
+        -- PAGE 5: CHANNEL LIST
+        { RelativeLayout, id="page_list", layout_width="fill", layout_height="fill", visibility=View.GONE,
+            { LinearLayout, id="listBottomBar", layout_width="fill", layout_height="wrap_content", layout_alignParentBottom="true", padding="10dp", gravity="center",
+                { Button, id="btn_list_back", text="Go Back to Categories", layout_width="fill", layout_height="60dp" }
+            },
+            { LinearLayout, orientation="vertical", layout_width="fill", layout_height="fill", layout_above="listBottomBar", padding="15dp",
+                { TextView, id="tv_list_header", text="Channels", textSize="18sp", gravity="center", layout_marginBottom="10dp", layout_width="fill", focusable=true },
+                { LinearLayout, orientation="horizontal", layout_width="fill", layout_marginBottom="10dp",
+                    { EditText, id="edt_list_search", hint="Search...", layout_weight="1" },
+                    { Button, id="btn_list_search", text="Find" }
+                },
+                { ListView, id="lv_channels", layout_width="fill", layout_height="fill" }
+            }
+        },
+
+        -- PAGE 6: PLAYER (Fixed Bottom Buttons & Full Screen Logic)
+        { RelativeLayout, id="page_player", layout_width="fill", layout_height="fill", visibility=View.GONE,
+            -- Normal Mode Controls
+            { LinearLayout, id="playerBottomBar", orientation="vertical", layout_width="fill", layout_height="wrap_content", layout_alignParentBottom="true", padding="10dp", backgroundColor="#eeeeee",
+                { LinearLayout, orientation="horizontal", layout_width="fill", layout_marginBottom="5dp",
+                    { Button, id="btn_prev", text="Previous", layout_weight="1" },
+                    { Button, id="btn_play_pause", text="Pause", layout_weight="1" },
+                    { Button, id="btn_next", text="Next", layout_weight="1" }
+                },
+                { LinearLayout, orientation="horizontal", layout_width="fill", layout_marginBottom="5dp",
+                    { Button, id="btn_fav", text="Favorite", layout_weight="1" },
+                    { Button, id="btn_fullscreen", text="Full Screen TV", layout_weight="1" }
+                },
+                { Button, id="btn_player_close", text="Close Player (Stop)", layout_width="fill", layout_height="60dp" }
+            },
+            { LinearLayout, id="playerTopContent", orientation="vertical", layout_width="fill", layout_height="fill", layout_above="playerBottomBar", padding="15dp", gravity="center",
+                { FrameLayout, id="videoContainer", layout_width="fill", layout_height="220dp", focusable=false, layout_marginBottom="20dp" },
+                { TextView, id="tv_player_status", text="Status: Waiting...", textSize="18sp", gravity="center", layout_width="fill", focusable=true }
+            },
+            -- Exit Full Screen Button (Darmiyan mein, Niche Home Button ke paas)
+            { RelativeLayout, id="fullScreenControls", layout_width="fill", layout_height="fill", visibility=View.GONE,
+                { Button, id="btn_exit_fullscreen", text="Exit Full Screen", layout_width="wrap_content", layout_height="60dp", layout_alignParentBottom="true", layout_centerHorizontal="true", layout_marginBottom="20dp" }
+            }
+        }
+    }
+    
+    local view = loadlayout(main_layout, views)
+    
+    -- Inject VideoView programmatically
+    tv_video_view = VideoView(service)
+    tv_video_view.setFocusable(false)
+    tv_video_view.setFocusableInTouchMode(false)
+    tv_video_view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO)
+    local params = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+    views.videoContainer.addView(tv_video_view, params)
+    
+    local dialog_builder = AlertDialog.Builder(service)
+    dialog_builder.setView(view)
+    dialog_builder.setCancelable(false)
+    local alert = dialog_builder.create()
+    alert.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    alert.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY)
+    alert.show()
+    
+    -- Event: Main Menu Actions
+    views.btn_exit.onClick = function() 
+        pcall(function() radio_player.stop() radio_player.release() end)
+        pcall(function() tv_video_view.stopPlayback() end)
+        tts("Extension closed")
+        alert.dismiss() 
+    end
+    
+    -- Event: Settings Menu & WhatsApp Fix
+    local current_video_mode = prefs.getString("video_display_mode", "ON")
+    views.btn_video_mode.setText("Video Display Mode: " .. current_video_mode)
+    
+    views.btn_video_mode.onClick = function()
+        current_video_mode = (current_video_mode == "ON") and "OFF" or "ON"
+        editor.putString("video_display_mode", current_video_mode).apply()
+        views.btn_video_mode.setText("Video Display Mode: " .. current_video_mode)
+        if current_video_mode == "OFF" then
+            tts("Sirf audio mode on kar diya gaya hai, TV video hide ho jayegi.")
+        else
+            tts("Video mode on kar diya gaya hai.")
+        end
+    end
+    
+    views.btn_copy_wa.onClick = function()
+        local cm = service.getSystemService(Context.CLIPBOARD_SERVICE)
+        local clip = ClipData.newPlainText("WhatsApp", WHATSAPP_NUMBER)
+        cm.setPrimaryClip(clip)
+        tts("WhatsApp number copy ho gaya hai.")
+    end
+    
+    views.btn_contact_wa.onClick = function()
+        pcall(function() radio_player.stop() end)
+        pcall(function() tv_video_view.stopPlayback() end)
+        alert.dismiss()
+        local intent = Intent(Intent.ACTION_VIEW)
+        intent.setData(Uri.parse("https://wa.me/" .. WHATSAPP_NUMBER))
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        service.startActivity(intent)
+    end
+
+    views.btn_set_sleep.onClick = function()
+        local time = views.edt_sleep.getText().toString()
+        if time ~= "" then
+            tts("Sleep timer set for " .. time .. " minutes")
+            switchPage("page_main", views.btn_nav_settings)
+            mainHandler.postDelayed(Runnable{
+                run = function()
+                    tts("Sleep timer poora ho gaya hai, app band ho rahi hai")
+                    pcall(function() radio_player.stop() tv_video_view.stopPlayback() end)
+                    alert.dismiss()
+                end
+            }, tonumber(time) * 60 * 1000)
+        else
+            tts("Please enter minutes")
+        end
+    end
+    
+    views.btn_nav_settings.onClick = function() tts("Settings") switchPage("page_settings", views.tv_set_title) end
+    views.btn_settings_back.onClick = function() tts("Main Menu") switchPage("page_main", views.btn_nav_settings) end
+    
+    -- Event: Countries List Setup
+    local countryAdapter = ArrayAdapter(service, android.R.layout.simple_list_item_1, {})
+    views.lv_countries.setAdapter(countryAdapter)
+    for i, v in ipairs(countries) do countryAdapter.add(v.name) end
+    
+    local function fetchAPIAndCategories(code, cname)
+        views.tv_loading_cat.setVisibility(View.VISIBLE)
+        views.cat_fm.setVisibility(View.GONE) views.cat_radio.setVisibility(View.GONE) views.cat_islami_radio.setVisibility(View.GONE)
+        views.cat_tv_news.setVisibility(View.GONE) views.cat_tv_ent.setVisibility(View.GONE) views.cat_tv_islamic.setVisibility(View.GONE)
+        views.cat_tv_music.setVisibility(View.GONE) views.cat_tv_sports.setVisibility(View.GONE) views.cat_tv_other.setVisibility(View.GONE)
+        
+        if current_play_type == "RADIO" then
+            if code == "ALL" then
+                categorizeRadioChannels({}, code)
+                views.tv_loading_cat.setVisibility(View.GONE)
+                views.btn_select_country.setText("Country: " .. cname .. " (Total: " .. total_country_channels .. ")")
+                views.cat_fm.setVisibility(#list_fm > 0 and View.VISIBLE or View.GONE)
+                views.cat_radio.setVisibility(#list_radio > 0 and View.VISIBLE or View.GONE)
+                views.cat_islami_radio.setVisibility(#list_islami_radio > 0 and View.VISIBLE or View.GONE)
+                return
+            end
+            Http.get(active_radio_api .. "/stations/bycountrycodeexact/" .. code .. "?limit=5000&hidebroken=true", function(code_http, content)
+                mainHandler.post(function()
+                    views.tv_loading_cat.setVisibility(View.GONE)
+                    if code_http == 200 then
+                        local s, d = pcall(cjson.decode, content)
+                        if s then categorizeRadioChannels(d, code) else categorizeRadioChannels({}, code) end
+                    else categorizeRadioChannels({}, code) end
+                    views.btn_select_country.setText("Country: " .. cname .. " (Total: " .. total_country_channels .. ")")
+                    views.cat_fm.setVisibility(#list_fm > 0 and View.VISIBLE or View.GONE)
+                    views.cat_radio.setVisibility(#list_radio > 0 and View.VISIBLE or View.GONE)
+                    views.cat_islami_radio.setVisibility(#list_islami_radio > 0 and View.VISIBLE or View.GONE)
+                    tts("Radio Channels loaded")
+                end)
+            end)
+            
+        elseif current_play_type == "TV" then
+            Http.get(tv_channels_api, function(code_http, content)
+                mainHandler.post(function()
+                    views.tv_loading_cat.setVisibility(View.GONE)
+                    if code_http == 200 then
+                        local s, d = pcall(cjson.decode, content)
+                        if s then categorizeTVChannels(d, code) else categorizeTVChannels({}, code) end
+                    else categorizeTVChannels({}, code) end
+                    
+                    views.btn_select_country.setText("Country: " .. cname .. " (Total: " .. total_country_channels .. ")")
+                    views.cat_tv_news.setVisibility(#list_tv_news > 0 and View.VISIBLE or View.GONE)
+                    views.cat_tv_ent.setVisibility(#list_tv_ent > 0 and View.VISIBLE or View.GONE)
+                    views.cat_tv_islamic.setVisibility(#list_tv_islamic > 0 and View.VISIBLE or View.GONE)
+                    views.cat_tv_music.setVisibility(#list_tv_music > 0 and View.VISIBLE or View.GONE)
+                    views.cat_tv_sports.setVisibility(#list_tv_sports > 0 and View.VISIBLE or View.GONE)
+                    views.cat_tv_other.setVisibility(#list_tv_other > 0 and View.VISIBLE or View.GONE)
+                    tts("TV Channels loaded")
+                end)
+            end)
+        end
+    end
+    
+    views.lv_countries.setOnItemClickListener(AdapterView.OnItemClickListener{
+        onItemClick = function(parent, v, position, id)
+            saved_country_index = position
+            editor.putInt("saved_country_index", saved_country_index).apply()
+            local selected_name = countries[position+1].name
+            views.btn_select_country.setText("Loading: " .. selected_name .. "...")
+            tts(selected_name .. " selected")
+            switchPage("page_categories", views.btn_select_country)
+            fetchAPIAndCategories(countries[position+1].code, selected_name)
+        end
+    })
+    
+    views.btn_select_country.onClick = function() switchPage("page_countries", views.tv_country_title) tts("Select Country") end
+    views.btn_countries_back.onClick = function() switchPage("page_categories", views.btn_select_country) end
+    
+    -- Event: Categories Actions
+    views.btn_nav_fm.onClick = function()
+        current_play_type = "RADIO"
+        local current_cname = countries[saved_country_index+1].name
+        views.tv_cat_title.setText("FM Radio Categories")
+        views.btn_select_country.setText("Loading: " .. current_cname .. "...")
+        switchPage("page_categories", views.tv_cat_title)
+        fetchAPIAndCategories(countries[saved_country_index+1].code, current_cname)
+        tts("Radio Categories opened")
+    end
+    
+    views.btn_nav_tv.onClick = function()
+        current_play_type = "TV"
+        local current_cname = countries[saved_country_index+1].name
+        views.tv_cat_title.setText("Live TV Categories")
+        views.btn_select_country.setText("Loading: " .. current_cname .. "...")
+        switchPage("page_categories", views.tv_cat_title)
+        fetchAPIAndCategories(countries[saved_country_index+1].code, current_cname)
+        tts("TV Categories opened")
+    end
+    
+    views.btn_cat_back.onClick = function() 
+        if current_play_type == "RADIO" then switchPage("page_main", views.btn_nav_fm) else switchPage("page_main", views.btn_nav_tv) end
+        tts("Main Menu") 
+    end
+    
+    channelAdapter = ArrayAdapter(service, android.R.layout.simple_list_item_1, {})
+    views.lv_channels.setAdapter(channelAdapter)
+    
+    local function openChannelList(title, list_data)
+        current_category_title = title
+        current_playing_list = list_data
+        channelAdapter.clear()
+        for _, v in ipairs(list_data) do channelAdapter.add(v.n) end
+        views.tv_list_header.setText(title .. " (" .. #list_data .. ")")
+        switchPage("page_list", views.tv_list_header)
+        tts(title .. " opened")
+    end
+    
+    views.cat_fav.onClick = function() 
+        if current_play_type == "RADIO" then openChannelList("Favorites", list_favorites_radio)
+        else openChannelList("Favorites", list_favorites_tv) end
+    end
+    
+    views.cat_fm.onClick = function() openChannelList("FM Channels", list_fm) end
+    views.cat_radio.onClick = function() openChannelList("Radio Channels", list_radio) end
+    views.cat_islami_radio.onClick = function() openChannelList("Islami Channels", list_islami_radio) end
+    
+    views.cat_tv_news.onClick = function() openChannelList("News Channels", list_tv_news) end
+    views.cat_tv_ent.onClick = function() openChannelList("Entertainment", list_tv_ent) end
+    views.cat_tv_islamic.onClick = function() openChannelList("Islamic Channels", list_tv_islamic) end
+    views.cat_tv_music.onClick = function() openChannelList("Music Channels", list_tv_music) end
+    views.cat_tv_sports.onClick = function() openChannelList("Sports Channels", list_tv_sports) end
+    views.cat_tv_other.onClick = function() openChannelList("Other Channels", list_tv_other) end
+    
+    -- Event: Channel List Actions
+    views.btn_list_search.onClick = function()
+        local q = string.lower(views.edt_list_search.getText().toString())
+        channelAdapter.clear()
+        local temp = {}
+        for _, ch in ipairs(current_playing_list) do
+            if string.find(string.lower(ch.n), q, 1, true) then 
+                channelAdapter.add(ch.n)
+                table.insert(temp, ch)
+            end
+        end
+        current_playing_list = temp
+        tts("Search complete")
+    end
+    
+    views.btn_list_back.onClick = function() switchPage("page_categories", views.tv_cat_title) tts("Back to Categories") end
+    
+    views.lv_channels.setOnItemClickListener(AdapterView.OnItemClickListener{
+        onItemClick = function(parent, v, position, id)
+            switchPage("page_player", views.tv_player_status)
+            playStation(position + 1, current_playing_list)
+        end
+    })
+    
+    -- Event: Player Actions
+    views.btn_play_pause.onClick = function()
+        local st = current_playing_list[current_station_index]
+        if current_play_type == "RADIO" and radio_player then
+            if isPlaying then 
+                radio_player.pause() 
+                isPlaying = false
+                if timeoutRunnable then mainHandler.removeCallbacks(timeoutRunnable) timeoutRunnable = nil end
+                tts(st.n .. " pause ho gaya hai") 
+            else 
+                radio_player.start() 
+                isPlaying = true
+                tts(st.n .. " play ho gaya hai") 
+            end
+        elseif current_play_type == "TV" and tv_video_view then
+            if isPlaying then 
+                tv_video_view.pause() 
+                isPlaying = false
+                if timeoutRunnable then mainHandler.removeCallbacks(timeoutRunnable) timeoutRunnable = nil end
+                tts(st.n .. " pause ho gaya hai") 
+            else 
+                tv_video_view.start() 
+                isPlaying = true
+                tts(st.n .. " play ho gaya hai") 
+            end
+        end
+        if st then updatePlayerUI(st) end
+    end
+    
+    views.btn_next.onClick = function() 
+        if current_playing_list and #current_playing_list > 0 then
+            playStation(current_station_index + 1, current_playing_list) 
+        end
+    end
+    
+    views.btn_prev.onClick = function() 
+        if current_playing_list and #current_playing_list > 0 then
+            playStation(current_station_index - 1, current_playing_list) 
+        end
+    end
+    
+    views.btn_fav.onClick = function()
+        local st = current_playing_list[current_station_index]
+        if not st then return end
+        local isFav, idx = isFavorite(st.u, st.type)
+        if isFav then 
+            if st.type == "RADIO" then table.remove(list_favorites_radio, idx) else table.remove(list_favorites_tv, idx) end
+            tts("Favorite se remove ho gaya") 
+        else 
+            if st.type == "RADIO" then table.insert(list_favorites_radio, st) else table.insert(list_favorites_tv, st) end
+            tts("Favorite mein add ho gaya") 
+        end
+        saveFavorites()
+        updatePlayerUI(st)
+    end
+    
+    views.btn_player_close.onClick = function()
+        pcall(function() radio_player.stop() end)
+        pcall(function() tv_video_view.stopPlayback() tv_video_view.setVisibility(View.GONE) end)
+        isPlaying = false
+        if playRunnable then mainHandler.removeCallbacks(playRunnable) end
+        if timeoutRunnable then mainHandler.removeCallbacks(timeoutRunnable) end
+        
+        switchPage("page_list")
+        pcall(function()
+            views.lv_channels.setSelection(current_station_index - 1)
+            views.lv_channels.requestFocusFromTouch()
+            views.lv_channels.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED)
+        end)
+        tts("Player closed")
+    end
+    
+    -- FULL SCREEN LOGIC
+    views.btn_fullscreen.onClick = function()
+        if current_play_type ~= "TV" then
+            tts("Yeh button sirf TV channels ke liye hai")
+            return
+        end
+        views.playerBottomBar.setVisibility(View.GONE)
+        views.tv_player_status.setVisibility(View.GONE)
+        
+        -- Change Container Size to Match Parent
+        local lp = views.videoContainer.getLayoutParams()
+        lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+        views.videoContainer.setLayoutParams(lp)
+        
+        views.fullScreenControls.setVisibility(View.VISIBLE)
+        tts("Screen badi ho gayi hai. Choti karne ke liye niche wale button par click karein.")
+        focusOnView(views.btn_exit_fullscreen)
+    end
+    
+    views.btn_exit_fullscreen.onClick = function()
+        views.fullScreenControls.setVisibility(View.GONE)
+        
+        -- Restore Container Size
+        local lp = views.videoContainer.getLayoutParams()
+        lp.height = 220 * service.getResources().getDisplayMetrics().density
+        views.videoContainer.setLayoutParams(lp)
+        
+        views.playerBottomBar.setVisibility(View.VISIBLE)
+        views.tv_player_status.setVisibility(View.VISIBLE)
+        
+        tts("Screen wapas choti ho gayi hai")
+        focusOnView(views.btn_fullscreen)
+    end
+    
+    tts("Welcome to " .. APP_NAME)
+    focusOnView(views.tv_main_title)
+end
+
+buildLayout()
